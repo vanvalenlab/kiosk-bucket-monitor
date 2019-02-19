@@ -10,7 +10,5 @@ RUN pip install google-cloud-storage \
     redis
 
 COPY ./bucket-monitor.py /
-COPY DeepCell-abd537822d08.json /
 
-#CMD ["bash"]
 CMD ["python", "bucket-monitor.py"]
