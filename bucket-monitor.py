@@ -4,7 +4,6 @@
 
 from google.cloud import storage
 from redis import StrictRedis
-import pdb
 
 import os
 import datetime
@@ -18,10 +17,10 @@ def main():
     '''
     # read in environment variables
     CLOUD_PROVIDER = os.environ['CLOUD_PROVIDER']
-    if CLOUD_PROVIDER=="gke":
-        BUCKET_NAME = os.environ['GKE_BUCKET']
+    BUCKET_NAME = os.environ['BUCKET']
     REDIS_HOST = os.environ['REDIS_HOST']
     REDIS_PORT = os.environ['REDIS_PORT']
+    INTERVAL = os.environ['INTERVAL']
 
     # establish cloud connection
     if CLOUD_PROVIDER=="gke":
@@ -97,11 +96,7 @@ def main():
 
         # update baseline timestamp and sleep
         initial_timestamp = soon_to_be_baseline_timestamp
-        time.sleep(3)
-
-    pdb.set_trace()
-
-
+        time.sleep( int(INTERVAL) )
 
 if __name__=='__main__':
     main()
