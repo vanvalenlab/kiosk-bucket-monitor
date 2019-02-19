@@ -2,14 +2,14 @@
 # Watch for uploads into a cloud bucket and an write entry to the Redis databse
 # for each upload.
 
-from google.cloud import storage
-from redis import StrictRedis
-
 import os
 import datetime
 import pytz
 import re
 import time
+
+from google.cloud import storage
+from redis import StrictRedis
 
 def main():
     '''

@@ -6,7 +6,8 @@ RUN apt-get update && apt-get install -y \
 
 RUN ln -s /usr/bin/python3 /usr/bin/python && ln -s /usr/bin/pip3 /usr/bin/pip
 
-RUN pip install google-cloud-storage
+RUN pip install google-cloud-storage \
+    redis
 
 COPY ./bucket-monitor.py /
 COPY DeepCell-abd537822d08.json /
