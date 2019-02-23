@@ -85,7 +85,7 @@ def main():
         # for each of these new files, parse necessary information from the
         # filename and write an appropriate entry to Redis
         for upload in new_uploads:
-            re_filename = '(uploads(?:/|%2F)directupload_)(.+)$'
+            re_filename = '(uploads(?:/|%2F))(directupload_.+)$'
             try:
                 upload_filename = re.search(re_filename, upload.path).group(2)
             except AttributeError:
@@ -99,7 +99,7 @@ def main():
             field_dict['file_name'] = "uploads/" + upload_filename
             field_dict['status'] = "new"
             # filename schema: modelname_modelversion_ppfunc_cuts_etc
-            re_fields = '([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+'
+            re_fields = 'directupload_([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+$'
             fields = re.search(re_fields, upload_filename)
             try:
                 field_dict['model_name'] = fields.group(1)
@@ -109,7 +109,7 @@ def main():
             except AttributeError:
                 bm_logger.debug("Failed on fields of " + str(upload_filename) + ".")
                 continue
-            redis_key = "predict_directupload_" + uuid.uuid4().hex + \
+            redis_key = "predict_" + uuid.uuid4().hex + \
                     "_" + upload_filename
             redis.hmset( redis_key, field_dict)
             bm_logger.debug("Wrote Redis entry for " + upload_filename + ".")
