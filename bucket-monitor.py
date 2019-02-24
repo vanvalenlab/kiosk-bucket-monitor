@@ -65,7 +65,11 @@ def main():
         upload_times = []
         for upload in all_uploads:
             upload_times.append(upload.updated)
-        earliest_upload = min(upload_times)
+        try:
+            earliest_upload = min(upload_times)
+        except ValueError:
+            bm_logger.error("There may not be any folder with the " + 
+                    "chosen prefix. (By default, \"uploads\".)")
         uploads_length = len(all_uploads)
         upload_times_length = len(upload_times)
         for upload in all_uploads:
@@ -109,6 +113,7 @@ def main():
             except AttributeError:
                 bm_logger.debug("Failed on fields of " + str(upload_filename) + ".")
                 continue
+            field_dict['timestamp_upload'] = time.time() * 1000
             redis_key = "predict_" + uuid.uuid4().hex + \
                     "_" + upload_filename
             redis.hmset( redis_key, field_dict)
