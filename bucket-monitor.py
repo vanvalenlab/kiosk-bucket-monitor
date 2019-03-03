@@ -1,6 +1,6 @@
 # bucket-monitor.py
-# Watch for uploads into a cloud bucket and an write entry to the Redis databse
-# for each upload.
+# Watch for uploads into a cloud bucket and an write entry to the Redis
+# database for each upload.
 
 import os
 import datetime
@@ -12,6 +12,7 @@ import logging
 
 from google.cloud import storage
 from redis import StrictRedis
+from redis.exceptions import ConnectionError
 
 def main():
     '''
@@ -40,7 +41,7 @@ def main():
         bucket = client.get_bucket(BUCKET_NAME)
 
     # establish Redis connection
-    redis = StrictRedis(
+    r = StrictRedis(
         host=REDIS_HOST,
         port=REDIS_PORT,
         decode_responses=True,
@@ -68,7 +69,7 @@ def main():
         try:
             earliest_upload = min(upload_times)
         except ValueError:
-            bm_logger.error("There may not be any folder with the " + 
+            bm_logger.error("There may not be any folder with the " +
                     "chosen prefix. (By default, \"uploads\".)")
         uploads_length = len(all_uploads)
         upload_times_length = len(upload_times)
@@ -88,6 +89,19 @@ def main():
 
         # for each of these new files, parse necessary information from the
         # filename and write an appropriate entry to Redis
+        # Before writing, also check that no hash already in Redis contains
+        # this file's name. (We seem to have a problem with double
+        # entries in Redis.)
+        while True:
+            try:
+                all_keys = r.keys()
+                break
+            except ConnectionError:
+                # For some reason, we're unable to connect to Redis right now.
+                # Keep trying until we can.
+                bm_logger.warn("Trouble connecting to Redis. Retrying.")
+                time.sleep(5)
+        combined_keys = '\t'.join(all_keys) # long string containing all keys
         for upload in new_uploads:
             re_filename = '(uploads(?:/|%2F))(directupload_.+)$'
             try:
@@ -95,7 +109,13 @@ def main():
             except AttributeError:
                 # this isn't a directly uploaded file
                 # or its filename was formatted incorrectly
-                bm_logger.debug("Failed on filename of " + str(upload.path) + ".")
+                bm_logger.debug("Failed on filename of " +
+                        str(upload.path) + ".")
+                continue
+            # check for presence of filename in Redis already
+            if upload_filename in combined_keys:
+                bm_logger.debug(upload_filename +
+                        " tried to get uploaded a second time.")
                 continue
             # dictionary for uploading to Redis
             field_dict = {}
@@ -111,12 +131,21 @@ def main():
                 field_dict['postprocessing_function'] = fields.group(3)
                 field_dict['cuts'] = fields.group(4)
             except AttributeError:
-                bm_logger.debug("Failed on fields of " + str(upload_filename) + ".")
+                bm_logger.debug("Failed on fields of " +
+                        str(upload_filename) + ".")
                 continue
             field_dict['timestamp_upload'] = time.time() * 1000
             redis_key = "predict_" + uuid.uuid4().hex + \
                     "_" + upload_filename
-            redis.hmset( redis_key, field_dict)
+            while True:
+                try:
+                    r.hmset(redis_key, field_dict)
+                    break
+                except ConnectionError:
+                    # For some reason, we're unable to connect to Redis
+                    # right now. Keep trying until we can.
+                    bm_logger.warn("Trouble connecting to Redis. Retrying.")
+                    time.sleep(5)
             bm_logger.debug("Wrote Redis entry for " + upload_filename + ".")
 
         # update baseline timestamp and sleep
