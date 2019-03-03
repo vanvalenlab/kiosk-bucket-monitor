@@ -18,7 +18,7 @@ class BucketMonitor():
     '''
     Watch a cloud bucket and write an entry to Redis for each upload.
     '''
-    def __init__():
+    def __init__(self):
         # read in environment variables
         self.CLOUD_PROVIDER = os.environ['CLOUD_PROVIDER']
         self.BUCKET_NAME = os.environ['BUCKET']
@@ -38,8 +38,8 @@ class BucketMonitor():
 
         # establish cloud connection
         if self.CLOUD_PROVIDER=="gke":
-            client = storage.Client()
-            bucket = client.get_bucket(self.BUCKET_NAME)
+            self.bucket_client = storage.Client()
+            self.bucket = self.bucket_client.get_bucket(self.BUCKET_NAME)
 
         # establish Redis connection
         self.r = StrictRedis(
@@ -51,14 +51,14 @@ class BucketMonitor():
         # get initial timestamp to act as a baseline, assuming UTC for everything
         self.initial_timestamp = datetime.datetime.now(tz=pytz.UTC)
 
-    def monitor_bucket():
+    def monitor_bucket(self):
         # scan for new bucket uploads, write corresponding redis entires, and
         # then sleep
         while True:
             self.scan_bucket_for_new_uploads()
             time.sleep( int(self.INTERVAL) )
 
-    def scan_bucket_for_new_uploads():
+    def scan_bucket_for_new_uploads(self):
         # logging loop beginning
         self.bm_logger.debug("New loop at " + str(self.initial_timestamp))
         
@@ -66,7 +66,7 @@ class BucketMonitor():
         soon_to_be_baseline_timestamp = datetime.datetime.now(tz=pytz.UTC)
         
         # get references to every file starting with "uploads/"
-        all_uploads_iterator = bucket.list_blobs(prefix='uploads/')
+        all_uploads_iterator = self.bucket.list_blobs(prefix='uploads/')
         all_uploads = list(all_uploads_iterator)
 
         # the oldest one is going to be the "uploads/" folder, so remove that
@@ -105,7 +105,7 @@ class BucketMonitor():
         # update baseline timestamp
         self.initial_timestamp = soon_to_be_baseline_timestamp
 
-    def _get_all_redis_keys():
+    def _get_all_redis_keys(self):
         while True:
             try:
                 all_keys = self.r.keys()
@@ -117,7 +117,7 @@ class BucketMonitor():
                 time.sleep(5)
         self.combined_keys = '\t'.join(all_keys) # long string containing all keys
 
-    def _write_new_redis_keys():
+    def _write_new_redis_keys(self):
         for upload in self.new_uploads:
             # verify that we're dealing with a direct upload, and not a web
             # upload
