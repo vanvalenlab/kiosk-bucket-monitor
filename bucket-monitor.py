@@ -27,14 +27,7 @@ class BucketMonitor():
         self.INTERVAL = os.environ['INTERVAL']
 
         # confiugre logger
-        self.bm_logger = logging.getLogger('bucket-monitor')
-        self.bm_logger.setLevel(logging.DEBUG)
-        fh = logging.FileHandler('bucket-monitor.log')
-        fh.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        fh.setFormatter(formatter)
-        self.bm_logger.addHandler(fh)
+        self._configure_logger()
 
         # establish cloud connection
         if self.CLOUD_PROVIDER=="gke":
@@ -50,6 +43,24 @@ class BucketMonitor():
 
         # get initial timestamp to act as a baseline, assuming UTC for everything
         self.initial_timestamp = datetime.datetime.now(tz=pytz.UTC)
+
+    def _configure_logger(self):
+        self.bm_logger = logging.getLogger('autoscaler')
+        self.bm_logger.setLevel(logging.DEBUG)
+        # Send logs to stdout so they can be read via Kubernetes.
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        sh.setFormatter(formatter)
+        self.bm_logger.addHandler(sh)
+        # Also send logs to a file for later inspection.
+        fh = logging.FileHandler('autoscaler.log')
+        fh.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        fh.setFormatter(formatter)
+        self.bm_logger.addHandler(fh)
 
     def monitor_bucket(self):
         # scan for new bucket uploads, write corresponding redis entires, and
