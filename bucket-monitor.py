@@ -143,7 +143,8 @@ class BucketMonitor():
             benchmarking_result = re.search(benchmarking_re, upload_filename)
             if benchmarking_result is None:
                 # standard direct upload
-                self._create_single_redis_entry(upload, upload_filename)
+                self._create_single_redis_entry(upload, upload_filename,
+                        upload_filename)
             else:
                 # "benchmarking" direct upload
                 number_of_images = benchmarking_result.group(1)
@@ -154,19 +155,22 @@ class BucketMonitor():
             number_of_images):
         # make a numbe rof redis entries corresponding to the number found in
         # the benchmarking section of the filename
-        for img_num in range(number_of_images):
-            upload_filename = upload_filename + str(img_num)
-            _create_single_redis_entry(upload, upload_filename)
+        for img_num in range(int(number_of_images)):
+            current_upload_filename = upload_filename[:-4] + str(img_num) + \
+                    upload_filename[-4:]
+            self._create_single_redis_entry(upload, current_upload_filename, 
+                    upload_filename)
 
-    def _create_single_redis_entry(self, upload, upload_filename):
+    def _create_single_redis_entry(self, upload, modified_upload_filename,
+            unmodified_upload_filename):
         # dictionary for uploading to Redis
         field_dict = {}
         field_dict['url'] = upload.public_url
-        field_dict['file_name'] = "uploads/" + upload_filename
+        field_dict['file_name'] = "uploads/" + unmodified_upload_filename
         field_dict['status'] = "new"
         # filename schema: modelname_modelversion_ppfunc_cuts_etc
         re_fields = 'directupload_([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+$'
-        fields = re.search(re_fields, upload_filename)
+        fields = re.search(re_fields, unmodified_upload_filename)
         try:
             field_dict['model_name'] = fields.group(1)
             field_dict['model_version'] = fields.group(2)
@@ -174,18 +178,19 @@ class BucketMonitor():
             field_dict['cuts'] = fields.group(4)
         except AttributeError:
             self.bm_logger.debug("Failed on fields of " +
-                    str(upload_filename) + ".")
+                    str(modified_upload_filename) + ".")
             return 0
 
         field_dict['timestamp_upload'] = time.time() * 1000
         redis_key = "predict_" + uuid.uuid4().hex + \
-                "_" + upload_filename
-        self._write_redis_entry(redis_key, field_dict)
+                "_" + modified_upload_filename
+        self._write_redis_entry(redis_key, field_dict, 
+                modified_upload_filename)
 
-    def _write_redis_entry(self, redis_key, field_dict):
+    def _write_redis_entry(self, redis_key, field_dict, upload_filename):
         while True:
             try:
-                r.hmset(redis_key, field_dict)
+                self.r.hmset(redis_key, field_dict)
                 break
             except ConnectionError:
                 # For some reason, we're unable to connect to Redis
