@@ -45,7 +45,7 @@ class BucketMonitor():
         self.initial_timestamp = datetime.datetime.now(tz=pytz.UTC)
 
     def _configure_logger(self):
-        self.bm_logger = logging.getLogger('autoscaler')
+        self.bm_logger = logging.getLogger('bucket-monitor')
         self.bm_logger.setLevel(logging.DEBUG)
         # Send logs to stdout so they can be read via Kubernetes.
         sh = logging.StreamHandler(sys.stdout)
@@ -55,7 +55,7 @@ class BucketMonitor():
         sh.setFormatter(formatter)
         self.bm_logger.addHandler(sh)
         # Also send logs to a file for later inspection.
-        fh = logging.FileHandler('autoscaler.log')
+        fh = logging.FileHandler('bucket-monitor.log')
         fh.setLevel(logging.DEBUG)
         formatter = logging.Formatter(
                 '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
