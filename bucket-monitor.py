@@ -9,6 +9,7 @@ import re
 import time
 import uuid
 import logging
+import sys
 
 from google.cloud import storage
 from redis import StrictRedis
@@ -49,7 +50,7 @@ class BucketMonitor():
         self.bm_logger.setLevel(logging.DEBUG)
         # Send logs to stdout so they can be read via Kubernetes.
         sh = logging.StreamHandler(sys.stdout)
-        sh.setLevel(logging.DEBUG)
+        sh.setLevel(logging.INFO)
         formatter = logging.Formatter(
                 '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         sh.setFormatter(formatter)
@@ -71,7 +72,7 @@ class BucketMonitor():
 
     def scan_bucket_for_new_uploads(self):
         # logging loop beginning
-        self.bm_logger.debug("New loop at " + str(self.initial_timestamp))
+        self.bm_logger.info("New loop at " + str(self.initial_timestamp))
         
         # get a timestamp to mark the baseline for the next loop iteration
         soon_to_be_baseline_timestamp = datetime.datetime.now(tz=pytz.UTC)
@@ -104,6 +105,7 @@ class BucketMonitor():
         for upload in all_uploads:
             if upload.updated > self.initial_timestamp:
                 self.new_uploads.append(upload)
+                self.bm_logger.info("Found new upload: " + str(upload))
         
         # for each of these new uploads, parse necessary information from the
         # filename and write an appropriate entry to Redis
@@ -121,12 +123,14 @@ class BucketMonitor():
             try:
                 all_keys = self.r.keys()
                 break
-            except ConnectionError:
+            except ConnectionError as err:
                 # For some reason, we're unable to connect to Redis right now.
                 # Keep trying until we can.
-                self.bm_logger.warn("Trouble connecting to Redis. Retrying.")
+                self.bm_logger.warn("Trouble connecting to Redis. " + 
+                    str(type(err).__name__) + ": " + str(err) + " \nRetrying.")
                 time.sleep(5)
-        self.combined_keys = '\t'.join(all_keys) # long string containing all keys
+        # long string containing all keys
+        self.combined_keys = '\t'.join(all_keys)
 
     def _write_new_redis_keys(self):
         for upload in self.new_uploads:
@@ -135,16 +139,17 @@ class BucketMonitor():
             re_filename = '(uploads(?:/|%2F))(directupload_.+)$'
             try:
                 upload_filename = re.search(re_filename, upload.path).group(2)
-            except AttributeError:
+            except AttributeError as err:
                 # this isn't a directly uploaded file
                 # or its filename was formatted incorrectly
                 self.bm_logger.debug("Failed on filename of " +
-                        str(upload.path) + ".")
+                        str(upload.path) + ". Error %s: %s",
+                        type(err).__name__, err )
                 continue
 
             # check for presence of filename in Redis already
             if upload_filename in self.combined_keys:
-                self.bm_logger.debug(upload_filename +
+                self.bm_logger.warn(upload_filename +
                         " tried to get uploaded a second time.")
                 continue
 
@@ -188,7 +193,7 @@ class BucketMonitor():
             field_dict['postprocessing_function'] = fields.group(3)
             field_dict['cuts'] = fields.group(4)
         except AttributeError:
-            self.bm_logger.debug("Failed on fields of " +
+            self.bm_logger.warn("Failed on fields of " +
                     str(modified_upload_filename) + ".")
             return 0
 
