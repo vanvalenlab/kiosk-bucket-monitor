@@ -208,10 +208,11 @@ class BucketMonitor():
             try:
                 self.r.hmset(redis_key, field_dict)
                 break
-            except ConnectionError:
+            except ConnectionError as err:
                 # For some reason, we're unable to connect to Redis
                 # right now. Keep trying until we can.
-                self.bm_logger.warn("Trouble connecting to Redis. Retrying.")
+                self.bm_logger.warn("Trouble connecting to Redis. Retrying." +
+                        " %s: %s", type(err).__name__, err)
                 time.sleep(5)
         self.bm_logger.debug("Wrote Redis entry for " + upload_filename + ".")
 
