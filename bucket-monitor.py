@@ -26,6 +26,7 @@ class BucketMonitor():
         self.REDIS_HOST = os.environ['REDIS_HOST']
         self.REDIS_PORT = os.environ['REDIS_PORT']
         self.INTERVAL = os.environ['INTERVAL']
+        self.HOSTNAME = os.environ['HOSTNAME']
 
         # confiugre logger
         self._configure_logger()
@@ -197,6 +198,7 @@ class BucketMonitor():
                     str(modified_upload_filename) + ".")
             return 0
 
+        field_dict['identity_upload'] = self.HOSTNAME
         field_dict['timestamp_upload'] = time.time() * 1000
         redis_key = "predict_" + uuid.uuid4().hex + \
                 "_" + modified_upload_filename
