@@ -182,7 +182,7 @@ class BucketMonitor():
         # dictionary for uploading to Redis
         field_dict = {}
         field_dict['url'] = upload.public_url
-        field_dict['file_name'] = "uploads/" + unmodified_upload_filename
+        field_dict['input_file_name'] = "uploads/" + unmodified_upload_filename
         field_dict['status'] = "new"
         # filename schema: modelname_modelversion_ppfunc_cuts_etc
         re_fields = 'directupload_([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+$'
