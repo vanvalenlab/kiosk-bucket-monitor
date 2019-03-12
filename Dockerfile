@@ -1,16 +1,11 @@
-FROM ubuntu:18.04
+FROM python:3.6
 
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    vim
+WORKDIR /usr/src/app
 
-RUN ln -s /usr/bin/python3 /usr/bin/python && ln -s /usr/bin/pip3 /usr/bin/pip
+COPY requirements.txt .
 
-RUN pip install google-cloud-storage \
-    redis
+RUN pip install -r requirements.txt
 
-COPY ./bucket-monitor.py /
+COPY . .
 
-#CMD ["sleep", "10000"]
 CMD ["python", "bucket-monitor.py"]
