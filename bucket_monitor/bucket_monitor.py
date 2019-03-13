@@ -36,9 +36,8 @@ import logging
 import datetime
 
 import pytz
+import redis
 from google.cloud import storage
-from redis import StrictRedis
-from redis.exceptions import ConnectionError
 
 
 class BucketMonitor(object):
@@ -47,31 +46,31 @@ class BucketMonitor(object):
     def __init__(self,
                  cloud_provider,
                  bucket_name,
-                 redis_host='redis-master-0',
-                 redis_port=6379,
-                 hostname=None):
-        self.logger = logging.getLogger(str(self.__class__.__name__))
-
-        # establish cloud connection
-        if cloud_provider == 'gke':
-            self.bucket_client = storage.Client()
-            self.bucket = self.bucket_client.get_bucket(bucket_name)
-        elif cloud_provider == 'aws':
-            raise NotImplementedError('AWS will be supported soon.')
-        else:
+                 redis_client,
+                 job_type='predict',
+                 hostname=None,
+                 redis_retry_interval=5,
+                 upload_prefix='uploads/'):
+        if str(cloud_provider).lower() not in {'gke', 'aws'}:
             raise ValueError('Invalid cloud_provider: `%s`' % cloud_provider)
 
-        # establish Redis connection
-        self.r = StrictRedis(
-            host=redis_host,
-            port=redis_port,
-            decode_responses=True,
-            charset='utf-8')
-
-        self.hostname = os.getenv('HOSTNAME') if hostname is None else hostname
+        self.cloud_provider = cloud_provider
+        self.r = redis_client  # establish Redis connection
+        self.bucket_name = bucket_name
+        self.redis_retry_interval = redis_retry_interval
+        self.job_type = job_type
+        self.hostname = hostname
 
         # get initial timestamp to act as a baseline, assume UTC for everything
         self.initial_timestamp = datetime.datetime.now(tz=pytz.UTC)
+
+        self.upload_prefix = upload_prefix
+        if not self.upload_prefix.endswith('/'):
+            self.upload_prefix += '/'  # append trailing "/"
+        while self.upload_prefix.startswith('/'):
+            self.upload_prefix = self.upload_prefix[1:]  # remove leading "/"
+
+        self.logger = logging.getLogger(str(self.__class__.__name__))
 
     def monitor_bucket(self, interval):
         """Checks for new bucket uploads to write to Redis every N seconds.
@@ -87,7 +86,8 @@ class BucketMonitor(object):
         soon_to_be_baseline_timestamp = datetime.datetime.now(tz=pytz.UTC)
 
         # get references to every file starting with "uploads/"
-        all_uploads_iterator = self.bucket.list_blobs(prefix='uploads/')
+        # TODO: self.bucket? agnostic for AWS?
+        all_uploads_iterator = self.bucket.list_blobs(prefix=self.upload_prefix)
         all_uploads = list(all_uploads_iterator)
 
         # the oldest one is going to be the "uploads/" folder, so remove that
@@ -110,27 +110,28 @@ class BucketMonitor(object):
         assert len(all_uploads) == uploads_length - 1
         assert len(upload_times) == upload_times_length - 1
 
-        # keep only the files whose timestamps lie between now and the last
-        # iteration of this loop
-        new_uploads = []
+        all_keys = self.keys()  # get all the keys in Redis
+
         for upload in all_uploads:
+            # only write new keys for uploads between now and the last iteration
             if upload.updated > self.initial_timestamp:
-                new_uploads.append(upload)
+                # new_uploads.append(upload)
                 self.logger.info('Found new upload: %s', upload)
+                self._write_new_redis_keys(upload, set(all_keys))
 
         # for each of these new uploads, parse necessary information from the
         # filename and write an appropriate entry to Redis
         # Before writing, also check that no hash already in Redis contains
         # this file's name. (We seem to have a problem with double
         # entries in Redis.)
-        all_keys = self._get_all_redis_keys()
-        self._write_new_redis_keys(new_uploads, all_keys)
 
         # update baseline timestamp
         self.initial_timestamp = soon_to_be_baseline_timestamp
 
-    def _get_all_redis_keys(self, interval=5):
-        """Queries Redis for all keys and return them joined with the delimiter
+    def keys(self):
+        """Wrapper function for redis.keys().
+
+        Retries on ConnectionError every N seconds.
 
         Args:
             interval: time to wait before retrying redis query.
@@ -138,113 +139,124 @@ class BucketMonitor(object):
         Returns:
             a set of all keys in Redis.
         """
-        retrying = True
-        while retrying:
+        while True:
             try:
                 all_keys = self.r.keys()
-                retrying = False
-            except ConnectionError as err:
+                break
+            except redis.exceptions.ConnectionError as err:
                 # Issue connecting to Redis. Retry until connection established.
                 self.logger.warn('Trouble connecting to Redis: %s - %s.\n'
                                  'Retrying in %s seconds...',
-                                 type(err).__name__, err, interval)
-                time.sleep(interval)
+                                 type(err).__name__, err,
+                                 self.redis_retry_interval)
 
-        return set(list(all_keys))  # set of all keys in Redis.
+                time.sleep(self.redis_retry_interval)
 
-    def _write_new_redis_keys(self, new_uploads, all_keys):
-        for upload in new_uploads:
-            # verify that we're dealing with a direct upload, and not a web
-            # upload
-            re_filename = '(uploads(?:/|%2F))(directupload_.+)$'
-            try:
-                upload_filename = re.search(re_filename, upload.path).group(2)
-            except AttributeError as err:
-                # this isn't a directly uploaded file
-                # or its filename was formatted incorrectly
-                self.logger.debug('Failed on filename of %s. Error %s: %s',
-                                  upload.path, type(err).__name__, err)
-                continue
+        return all_keys
 
-            # check for presence of filename in Redis already
-            if upload_filename in all_keys:
-                self.logger.warn('%s tried to get uploaded a second time.',
-                                 upload_filename)
-                continue
+    def _write_new_redis_keys(self, upload, redis_keys):
+        # verify that we're dealing with a direct upload, and not a web upload
+        re_filename = '({}(?:/|%2F))(directupload_.+)$'.format(
+            self.upload_prefix[:-1])
 
-            # Is this a special "benchmarking" direct upload?
-            benchmarking_result = re.search('benchmarking([0-9]+)special',
-                                            upload_filename)
+        try:
+            upload_filename = re.search(re_filename, upload.path).group(2)
+        except AttributeError as err:
+            # this isn't a directly uploaded file
+            # or its filename was formatted incorrectly
+            self.logger.debug('Failed on filename of %s. Error %s: %s',
+                              upload.path, type(err).__name__, err)
+            return False
 
-            if benchmarking_result is None:
-                # standard direct upload
-                self._create_single_redis_entry(
-                    upload, upload_filename, upload_filename)
-            else:
-                # "benchmarking" direct upload
-                self._create_multiple_redis_entries(
-                    upload, upload_filename,
-                    number_of_images=benchmarking_result.group(1))
+        # check for presence of filename in Redis already
+        if upload_filename in redis_keys:
+            self.logger.warn('%s tried to get uploaded a second time.',
+                             upload_filename)
+            return False
 
-    def _create_multiple_redis_entries(self,
-                                       upload,
-                                       upload_filename,
-                                       number_of_images):
-        # make a number of redis entries corresponding to the number found in
-        # the benchmarking section of the filename
-        root, ext = os.path.splitext(upload_filename)
-        for img_num in range(int(number_of_images)):
-            current_upload_filename = '{basename}{num}{ext}'.format(
-                basename=root, num=img_num, ext=ext)
+        # Is this a special "benchmarking" direct upload?
+        benchmarking_result = re.search('benchmarking([0-9]+)special',
+                                        upload_filename)
 
+        if benchmarking_result is None:  # "standard" direct upload
             self._create_single_redis_entry(
-                upload, current_upload_filename, upload_filename)
+                upload, upload_filename, upload_filename)
+
+        else:  # "benchmarking" direct upload
+            root, ext = os.path.splitext(upload_filename)
+            for img_num in range(int(benchmarking_result.group(1))):
+                current_upload_filename = '{basename}{num}{ext}'.format(
+                    basename=root, num=img_num, ext=ext)
+
+                self._create_single_redis_entry(
+                    upload, current_upload_filename, upload_filename)
+
+    def parse_predict_fields(self, upload, filename):
+        field_dict = {}
+        field_dict['url'] = upload.public_url
+        field_dict['input_file_name'] = self.upload_prefix + filename
+        # filename schema: modelname_modelversion_ppfunc_cuts_etc
+        re_fields = 'directupload_([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+$'
+        fields = re.search(re_fields, filename)
+        field_dict['model_name'] = fields.group(1)
+        field_dict['model_version'] = fields.group(2)
+        field_dict['postprocessing_function'] = fields.group(3)
+        field_dict['cuts'] = fields.group(4)
+        return field_dict
 
     def _create_single_redis_entry(self,
                                    upload,
                                    modified_upload_filename,
                                    unmodified_upload_filename):
         # dictionary for uploading to Redis
-        field_dict = {}
-        field_dict['url'] = upload.public_url
-        field_dict['input_file_name'] = 'uploads/' + unmodified_upload_filename
-        field_dict['status'] = 'new'
-        # filename schema: modelname_modelversion_ppfunc_cuts_etc
-        re_fields = 'directupload_([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+$'
-        fields = re.search(re_fields, unmodified_upload_filename)
-        try:
-            field_dict['model_name'] = fields.group(1)
-            field_dict['model_version'] = fields.group(2)
-            field_dict['postprocessing_function'] = fields.group(3)
-            field_dict['cuts'] = fields.group(4)
-        except AttributeError:
-            self.logger.warn('Failed on fields of %s.', modified_upload_filename)
-            return 0
+        if self.job_type == 'predict':
+            try:
+                field_dict = self.parse_predict_fields(
+                    upload, unmodified_upload_filename)
+            except AttributeError:
+                # this isn't a directly uploaded file
+                # or its filename was formatted incorrectly
+                self.logger.debug('Failed on filename of ``%s`.', upload.path)
+                return False
+
+        elif self.job_type == 'notebook':
+            field_dict = {'input_file_name': upload.name}
+
+        else:
+            raise NotImplementedError('Job type of {} is not supported yet'.format(
+                self.job_type))
 
         field_dict['identity_upload'] = self.hostname
         field_dict['timestamp_upload'] = time.time() * 1000
-        redis_key = 'predict_{hash}_{filename}'.format(
+        redis_key = '{job_type}_{hash}_{filename}'.format(
+            job_type='predict',  # TODO: build other job types?
             hash=uuid.uuid4().hex,
             filename=modified_upload_filename)
 
-        self._write_redis_entry(redis_key, field_dict, modified_upload_filename)
+        self.hmset(redis_key, field_dict)
+        self.logger.debug('Wrote Redis entry for %s.', modified_upload_filename)
+        return True
 
-    def _write_redis_entry(self,
-                           redis_key,
-                           field_dict,
-                           upload_filename,
-                           interval=5):
-        retrying = True
-        while retrying:
+    def hmset(self, redis_key, fields):
+        """Wrapper function for redis.hmset(key, data).
+
+        Retries on ConnectionError every N seconds.
+
+        Args:
+            interval: time to wait before retrying redis query.
+
+        Returns:
+            a set of all keys in Redis.
+        """
+        while True:
             try:
-                self.r.hmset(redis_key, field_dict)
-                retrying = False
-            except ConnectionError as err:
-                # For some reason, we're unable to connect to Redis
-                # right now. Keep trying until we can.
+                self.r.hmset(redis_key, fields)
+                break
+            except redis.exceptions.ConnectionError as err:
+                # Can't connect to Redis, retry until connection established.
                 self.logger.warn('Encountered %s while connecting to Redis: %s.'
                                  '  Retrying in %s seconds...',
-                                 type(err).__name__, err, interval)
-                time.sleep(interval)
+                                 type(err).__name__, err,
+                                 self.redis_retry_interval)
 
-        self.logger.debug('Wrote Redis entry for %s.', upload_filename)
+                time.sleep(self.redis_retry_interval)
