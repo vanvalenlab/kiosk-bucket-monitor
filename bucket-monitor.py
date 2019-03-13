@@ -31,6 +31,7 @@ database for each upload.
 import logging
 import sys
 
+import redis
 import decouple
 
 from bucket_monitor import BucketMonitor
@@ -70,14 +71,18 @@ if __name__ == '__main__':
     # Set up logging
     initialize_logger()
 
+    R = redis.StrictRedis(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        decode_responses=True,
+        charset='utf-8')
+
     # Create the bucket monitor
     BM = BucketMonitor(
         cloud_provider=CLOUD_PROVIDER,
         bucket_name=BUCKET_NAME,
-        redis_host=REDIS_HOST,
-        redis_port=REDIS_PORT,
-        hostname=HOSTNAME
-    )
+        redis_client=R,
+        hostname=HOSTNAME)
 
     # Monitor the bucket
     BM.monitor_bucket(INTERVAL)
