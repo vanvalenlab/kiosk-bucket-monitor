@@ -72,13 +72,6 @@ class BucketMonitor(object):
 
         self.logger = logging.getLogger(str(self.__class__.__name__))
 
-    def monitor_bucket(self, interval):
-        """Checks for new bucket uploads to write to Redis every N seconds.
-        """
-        while True:
-            self.scan_bucket_for_new_uploads()
-            time.sleep(interval)
-
     def scan_bucket_for_new_uploads(self):
         self.logger.info('New loop at %s', self.initial_timestamp)
 

@@ -30,11 +30,12 @@ database for each upload.
 
 import logging
 import sys
+import time
 
 import redis
 import decouple
 
-from bucket_monitor import BucketMonitor
+import bucket_monitor
 
 
 def initialize_logger():
@@ -78,11 +79,13 @@ if __name__ == '__main__':
         charset='utf-8')
 
     # Create the bucket monitor
-    BM = BucketMonitor(
+    BM = bucket_monitor.BucketMonitor(
         cloud_provider=CLOUD_PROVIDER,
         bucket_name=BUCKET_NAME,
         redis_client=R,
         hostname=HOSTNAME)
 
     # Monitor the bucket
-    BM.monitor_bucket(INTERVAL)
+    while True:
+        BM.scan_bucket_for_new_uploads()
+        time.sleep(INTERVAL)
