@@ -28,7 +28,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from bucket_monitor import BucketMonitor
+from bucket_monitor.bucket_monitor import BucketMonitor
 
 del absolute_import
 del division
