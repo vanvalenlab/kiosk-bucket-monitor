@@ -87,8 +87,7 @@ class BucketMonitor(object):
 
         # get references to every file starting with "uploads/"
         # TODO: self.bucket? agnostic for AWS?
-        all_uploads_iterator = self.bucket.list_blobs(prefix=self.upload_prefix)
-        all_uploads = list(all_uploads_iterator)
+        all_uploads = list(self.bucket.list_blobs(prefix=self.upload_prefix))
 
         # the oldest one is going to be the "uploads/" folder, so remove that
         upload_times = []
@@ -110,14 +109,14 @@ class BucketMonitor(object):
         assert len(all_uploads) == uploads_length - 1
         assert len(upload_times) == upload_times_length - 1
 
-        all_keys = self.keys()  # get all the keys in Redis
-
+        successes = 0
+        all_keys = set(self.keys())  # get all the keys in Redis
         for upload in all_uploads:
-            # only write new keys for uploads between now and the last iteration
+            # only write new keys for uploads between now and the last loop
             if upload.updated > self.initial_timestamp:
-                # new_uploads.append(upload)
                 self.logger.info('Found new upload: %s', upload)
-                self._write_new_redis_keys(upload, set(all_keys))
+                success = self._write_new_redis_keys(upload, all_keys)
+                successes += int(success)
 
         # for each of these new uploads, parse necessary information from the
         # filename and write an appropriate entry to Redis
@@ -127,6 +126,7 @@ class BucketMonitor(object):
 
         # update baseline timestamp
         self.initial_timestamp = soon_to_be_baseline_timestamp
+        self.logger.info('Successfully added %s keys to Redis', successes)
 
     def keys(self):
         """Wrapper function for redis.keys().
@@ -144,9 +144,9 @@ class BucketMonitor(object):
                 all_keys = self.r.keys()
                 break
             except redis.exceptions.ConnectionError as err:
-                # Issue connecting to Redis. Retry until connection established.
-                self.logger.warn('Trouble connecting to Redis: %s - %s.\n'
-                                 'Retrying in %s seconds...',
+                # Retry until Redis connection is established.
+                self.logger.warn('Connection to Redis could not be established'
+                                 ' due to %s: %s. Retrying in %s seconds...',
                                  type(err).__name__, err,
                                  self.redis_retry_interval)
 
@@ -190,6 +190,7 @@ class BucketMonitor(object):
 
                 self._create_single_redis_entry(
                     upload, current_upload_filename, upload_filename)
+        return True
 
     def parse_predict_fields(self, upload, filename):
         field_dict = {}
@@ -223,18 +224,19 @@ class BucketMonitor(object):
             field_dict = {'input_file_name': upload.name}
 
         else:
-            raise NotImplementedError('Job type of {} is not supported yet'.format(
-                self.job_type))
+            raise NotImplementedError('Job type of %s is not supported yet' %
+                                      self.job_type)
 
         field_dict['identity_upload'] = self.hostname
         field_dict['timestamp_upload'] = time.time() * 1000
         redis_key = '{job_type}_{hash}_{filename}'.format(
-            job_type='predict',  # TODO: build other job types?
+            job_type=self.job_type,  # TODO: build other job types?
             hash=uuid.uuid4().hex,
             filename=modified_upload_filename)
 
         self.hmset(redis_key, field_dict)
-        self.logger.debug('Wrote Redis entry for %s.', modified_upload_filename)
+        self.logger.debug('Wrote Redis entry for %s.',
+                          modified_upload_filename)
         return True
 
     def hmset(self, redis_key, fields):
@@ -254,8 +256,8 @@ class BucketMonitor(object):
                 break
             except redis.exceptions.ConnectionError as err:
                 # Can't connect to Redis, retry until connection established.
-                self.logger.warn('Encountered %s while connecting to Redis: %s.'
-                                 '  Retrying in %s seconds...',
+                self.logger.warn('Connection to Redis could not be established'
+                                 ' due to %s: %s. Retrying in %s seconds...',
                                  type(err).__name__, err,
                                  self.redis_retry_interval)
 
