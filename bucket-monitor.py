@@ -27,6 +27,9 @@
 Watch for uploads into a cloud bucket and an write entry to the Redis
 database for each upload.
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import logging
 import sys
@@ -42,11 +45,7 @@ def initialize_logger():
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    console = logging.StreamHandler(stream=sys.stdout)
-    console.setFormatter(formatter)
+    formatter = logging.Formatter('[%(asctime)s][%(levelname)s][%(name)s] %(message)s')
 
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(logging.INFO)
