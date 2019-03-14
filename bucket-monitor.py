@@ -97,6 +97,7 @@ class BucketMonitor():
             if upload.updated == earliest_upload:
                 all_uploads.remove(upload)
                 upload_times.remove(earliest_upload)
+        # make sure we only removed one entry
         assert len(all_uploads)==(uploads_length-1)
         assert len(upload_times)==(upload_times_length-1)
 
@@ -216,7 +217,21 @@ class BucketMonitor():
                 self.bm_logger.warn("Trouble connecting to Redis. Retrying." +
                         " %s: %s", type(err).__name__, err)
                 time.sleep(5)
-        self.bm_logger.debug("Wrote Redis entry for " + upload_filename + ".")
+        self.bm_logger.debug("Wrote Redis entry of %s for %s.",
+                self._redis_hgetall(redis_key), redis_key)
+
+    def _redis_hgetall(self, key):
+        while True:
+            try:
+                key_values = self.r.hgetall(key)
+                break
+            except ConnectionError as err:
+                # For some reason, we're unable to connect to Redis right now.
+                # Keep trying until we can.
+                self.bm_logger.warn("Trouble connecting to Redis. Retrying." +
+                        " %s: %s", type(err).__name__, err)
+                time.sleep(5)
+        return key_values
 
 if __name__=='__main__':
     bm = BucketMonitor()
