@@ -30,6 +30,7 @@ from __future__ import print_function
 
 import os
 import re
+import json
 import time
 import uuid
 import logging
@@ -112,7 +113,7 @@ class BucketMonitor(object):
             if upload.updated == earliest_upload:
                 all_uploads.remove(upload)
                 upload_times.remove(earliest_upload)
-
+        # make sure we only removed one entry
         assert len(all_uploads) == uploads_length - 1
         assert len(upload_times) == upload_times_length - 1
 
@@ -251,8 +252,33 @@ class BucketMonitor(object):
             filename=new_filename)
 
         self.hmset(redis_key, field_dict)
-        self.logger.info('Wrote Redis entry for %s.', new_filename)
+        self.logger.info('Wrote Redis entry for %s: %s', redis_key,
+                         json.dumps(self.hgetall(redis_key), indent=4))
         return 1
+
+    def hgetall(self, key):
+        """Wrapper function for redis.hgetall(key).
+
+        Retries on ConnectionError every N seconds.
+
+        Args:
+            interval: time to wait before retrying redis query.
+
+        Returns:
+            all redis values for the given key
+        """
+        while True:
+            try:
+                key_values = self.r.hgetall(key)
+                break
+            except redis.exceptions.ConnectionError as err:
+                self.logger.warn('Connection to Redis could not be established'
+                                 ' due to %s: %s. Retrying in %s seconds...',
+                                 type(err).__name__, err,
+                                 self.redis_retry_interval)
+
+                time.sleep(self.redis_retry_interval)
+        return key_values
 
     def hmset(self, redis_key, fields):
         """Wrapper function for redis.hmset(key, data).

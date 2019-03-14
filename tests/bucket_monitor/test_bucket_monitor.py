@@ -46,6 +46,12 @@ class DummyRedis(object):
             raise redis.exceptions.ConnectionError('thrown on purpose')
         return ['abc', '123']
 
+    def hgetall(self, _):
+        if self.fail_count < self.fail_tolerance:
+            self.fail_count += 1
+            raise redis.exceptions.ConnectionError('thrown on purpose')
+        return {'key': 'value'}
+
     def hmset(self, *_):
         if self.fail_count < self.fail_tolerance:
             self.fail_count += 1
@@ -115,6 +121,15 @@ class TestBucketMonitor(object):
 
         keys = bm.keys()
         assert keys == ['abc', '123']
+        assert bm.r.fail_count == redis_client.fail_tolerance
+
+    def test_hgetall(self):
+        redis_client = DummyRedis(fail_tolerance=2)
+        bm = BucketMonitor('gke', 'bucket', redis_client,
+                           redis_retry_interval=0.01)
+
+        data = bm.hgetall('redis_hash')
+        assert data == {'key': 'value'}
         assert bm.r.fail_count == redis_client.fail_tolerance
 
     def test_hmset(self):
