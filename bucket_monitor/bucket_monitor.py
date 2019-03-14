@@ -72,25 +72,39 @@ class BucketMonitor(object):
 
         self.logger = logging.getLogger(str(self.__class__.__name__))
 
+    def enumerate_uploads(self):
+        """Get a list of all uploads inside the cloud bucket's `upload_prefix`.
+
+        Returns:
+            list of objects inside the bucket/upload_prefix.
+        """
+        if self.cloud_provider == 'gke':
+            bucket_client = storage.Client()
+            bucket = bucket_client.get_bucket(self.bucket_name)
+            return list(bucket.list_blobs(prefix=self.upload_prefix))
+        elif self.cloud_provider == 'aws':
+            raise NotImplementedError('AWS is not currently supported')
+        else:
+            raise ValueError('Invalid cloud_provider: %s' % self.cloud_provider)
+
     def scan_bucket_for_new_uploads(self):
-        self.logger.info('New loop at %s', self.initial_timestamp)
+        self.logger.debug('New loop at %s', self.initial_timestamp)
 
         # get a timestamp to mark the baseline for the next loop iteration
         soon_to_be_baseline_timestamp = datetime.datetime.now(tz=pytz.UTC)
 
-        # get references to every file starting with "uploads/"
-        # TODO: self.bucket? agnostic for AWS?
-        all_uploads = list(self.bucket.list_blobs(prefix=self.upload_prefix))
+        # get references to every file starting with `upload_prefix`
+        all_uploads = self.enumerate_uploads()
 
-        # the oldest one is going to be the "uploads/" folder, so remove that
+        # the oldest one is going to be the `upload_prefix` folder, remove it
         upload_times = []
         for upload in all_uploads:
             upload_times.append(upload.updated)
         try:
             earliest_upload = min(upload_times)
         except ValueError:
-            self.logger.error('There may not be any folder with the chosen '
-                              'prefix. (By default, \"uploads\".)')
+            self.logger.error('No uploads found.  The value for upload_prefix:'
+                              ' ``%s` may be incorrect.', self.upload_prefix)
 
         uploads_length = len(all_uploads)
         upload_times_length = len(upload_times)
@@ -108,18 +122,14 @@ class BucketMonitor(object):
             # only write new keys for uploads between now and the last loop
             if upload.updated > self.initial_timestamp:
                 self.logger.info('Found new upload: %s', upload)
+                # parse info from the filename, and write data to Redis.
                 success = self._write_new_redis_keys(upload, all_keys)
                 successes += int(success)
 
-        # for each of these new uploads, parse necessary information from the
-        # filename and write an appropriate entry to Redis
-        # Before writing, also check that no hash already in Redis contains
-        # this file's name. (We seem to have a problem with double
-        # entries in Redis.)
-
         # update baseline timestamp
         self.initial_timestamp = soon_to_be_baseline_timestamp
-        self.logger.info('Successfully added %s keys to Redis', successes)
+        if successes:
+            self.logger.info('Successfully added %s keys to Redis', successes)
 
     def keys(self):
         """Wrapper function for redis.keys().
@@ -148,6 +158,17 @@ class BucketMonitor(object):
         return all_keys
 
     def _write_new_redis_keys(self, upload, redis_keys):
+        """Parse the upload information and write required data to Redis.
+
+        There seems to be an issue with double Redis entries, so before writing,
+        check that no hash already in Redis contains the filename.
+
+        Args:
+            upload: Object in cloud bucket.
+            redis_keys: a collection of hashes currently in Redis.
+
+        Returns: Count of keys written to Redis.
+        """
         # verify that we're dealing with a direct upload, and not a web upload
         re_filename = '({}(?:/|%2F))(directupload_.+)$'.format(
             self.upload_prefix[:-1])
@@ -159,36 +180,35 @@ class BucketMonitor(object):
             # or its filename was formatted incorrectly
             self.logger.debug('Failed on filename of %s. Error %s: %s',
                               upload.path, type(err).__name__, err)
-            return False
+            return 0
 
         # check for presence of filename in Redis already
         if upload_filename in redis_keys:
             self.logger.warn('%s tried to get uploaded a second time.',
                              upload_filename)
-            return False
+            return 0
 
         # Is this a special "benchmarking" direct upload?
         benchmarking_result = re.search('benchmarking([0-9]+)special',
                                         upload_filename)
 
         if benchmarking_result is None:  # "standard" direct upload
-            self._create_single_redis_entry(
+            return self._create_redis_entry(
                 upload, upload_filename, upload_filename)
 
-        else:  # "benchmarking" direct upload
-            root, ext = os.path.splitext(upload_filename)
-            for img_num in range(int(benchmarking_result.group(1))):
-                current_upload_filename = '{basename}{num}{ext}'.format(
-                    basename=root, num=img_num, ext=ext)
+        # "benchmarking" direct upload
+        count = 0
+        root, ext = os.path.splitext(upload_filename)
+        for img_num in range(int(benchmarking_result.group(1))):
+            current_upload_filename = '{basename}{num}{ext}'.format(
+                basename=root, num=img_num, ext=ext)
 
-                self._create_single_redis_entry(
-                    upload, current_upload_filename, upload_filename)
-        return True
+            count += self._create_redis_entry(upload, current_upload_filename,
+                                              upload_filename)
+        return count
 
-    def parse_predict_fields(self, upload, filename):
+    def parse_predict_fields(self, filename):
         field_dict = {}
-        field_dict['url'] = upload.public_url
-        field_dict['input_file_name'] = self.upload_prefix + filename
         # filename schema: modelname_modelversion_ppfunc_cuts_etc
         re_fields = 'directupload_([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+$'
         fields = re.search(re_fields, filename)
@@ -198,39 +218,41 @@ class BucketMonitor(object):
         field_dict['cuts'] = fields.group(4)
         return field_dict
 
-    def _create_single_redis_entry(self,
-                                   upload,
-                                   modified_upload_filename,
-                                   unmodified_upload_filename):
+    def _create_redis_entry(self, upload, new_filename, original_filename):
         # dictionary for uploading to Redis
         if self.job_type == 'predict':
             try:
-                field_dict = self.parse_predict_fields(
-                    upload, unmodified_upload_filename)
+                field_dict = self.parse_predict_fields(original_filename)
             except AttributeError:
                 # this isn't a directly uploaded file
                 # or its filename was formatted incorrectly
-                self.logger.debug('Failed on filename of ``%s`.', upload.path)
-                return False
+                self.logger.warn('Failed on filename of ``%s`.', upload.path)
+                return 0
 
         elif self.job_type == 'notebook':
-            field_dict = {'input_file_name': upload.name}
+            field_dict = {}
 
         else:
             raise NotImplementedError('Job type of %s is not supported yet' %
                                       self.job_type)
 
+        # standard fields for all job types
+        field_dict['url'] = upload.public_url
+        field_dict['input_file_name'] = os.path.join(
+            self.upload_prefix, original_filename)
         field_dict['identity_upload'] = self.hostname
         field_dict['timestamp_upload'] = time.time() * 1000
+        field_dict['status'] = 'new'
+        field_dict['type'] = self.job_type
+
         redis_key = '{job_type}_{hash}_{filename}'.format(
             job_type=self.job_type,  # TODO: build other job types?
             hash=uuid.uuid4().hex,
-            filename=modified_upload_filename)
+            filename=new_filename)
 
         self.hmset(redis_key, field_dict)
-        self.logger.debug('Wrote Redis entry for %s.',
-                          modified_upload_filename)
-        return True
+        self.logger.info('Wrote Redis entry for %s.', new_filename)
+        return 1
 
     def hmset(self, redis_key, fields):
         """Wrapper function for redis.hmset(key, data).
