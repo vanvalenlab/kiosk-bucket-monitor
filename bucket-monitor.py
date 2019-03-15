@@ -192,7 +192,7 @@ class BucketMonitor():
         try:
             field_dict['model_name'] = fields.group(1)
             field_dict['model_version'] = fields.group(2)
-            field_dict['postprocessing_function'] = fields.group(3)
+            field_dict['postprocess_function'] = fields.group(3)
             field_dict['cuts'] = fields.group(4)
         except AttributeError:
             self.bm_logger.warn("Failed on fields of " +
