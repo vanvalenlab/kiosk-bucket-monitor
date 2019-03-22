@@ -17,7 +17,7 @@ install:
   - pip install pytest pytest-cov==2.5.1 pytest-pep8 coveralls
 
 script:
-  - python -m pytest --cov=bucket_monitor --pep8 bucket_monitor tests
+  - python -m pytest --cov=bucket_monitor --pep8 bucket_monitor
 
 jobs:
   include:
