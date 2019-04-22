@@ -68,6 +68,7 @@ def initialize_logger(debug_mode=True):
 if __name__ == '__main__':
     INTERVAL = int(os.getenv('INTERVAL', '5'))
     PREFIX = os.getenv('PREFIX', 'uploads/')
+    QUEUE = os.getenv('QUEUE', 'predict')
 
     initialize_logger(os.getenv('DEBUG'))
 
@@ -80,7 +81,8 @@ if __name__ == '__main__':
     MONITOR = bucket_monitor.BucketMonitor(
         redis_client=REDIS,
         cloud_provider=os.getenv('CLOUD_PROVIDER'),
-        bucket_name=os.getenv('BUCKET'))
+        bucket_name=os.getenv('BUCKET'),
+        queue=QUEUE)
 
     while True:
         try:

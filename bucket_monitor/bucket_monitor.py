@@ -40,9 +40,10 @@ from google.cloud import storage
 class BucketMonitor(object):
     """Watches a bucket for new uploads and adds data for each to Redis."""
 
-    def __init__(self, redis_client, cloud_provider, bucket_name):
+    def __init__(self, redis_client, cloud_provider, bucket_name, queue):
         self.redis_client = redis_client
         self.bucket_name = bucket_name
+        self.queue = str(queue).lower()
         self.cloud_provider = str(cloud_provider).lower()
 
         self.fmt = '%b %d, %Y %H:%M:%S.%f'  # configure datetime string format

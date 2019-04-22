@@ -82,35 +82,39 @@ class TestBucketMonitor(object):
 
     def test_get_storage_api(self):
         # test invalid values for cloud_provider
-        monitor = bucket_monitor.BucketMonitor('redis', 'badcloud', 'bucket')
+        monitor = bucket_monitor.BucketMonitor('redis', 'bad', 'bucket', 'q')
         with pytest.raises(ValueError):
             monitor.get_storage_api()
 
     def test_get_all_uploads(self):
         # test GKE with stubbed client function
-        monitor = bucket_monitor.BucketMonitor('redis', 'gke', 'bucket')
+        monitor = bucket_monitor.BucketMonitor('redis', 'gke', 'bucket', 'q')
         monitor.get_storage_api = DummyBucket
         prefix = 'test/'
         uploads = monitor.get_all_uploads(prefix)
-        names = [u.name for u in uploads]
-        assert names == [u.name for u in DummyBucket().list_blobs(prefix)]
+
+        get_names = lambda x: [u.name for u in x]  # pylint: disable=E1101
+        names = get_names(uploads)
+        assert names == get_names(DummyBucket().list_blobs(prefix))
 
         # test invalid values for cloud_provider
-        monitor = bucket_monitor.BucketMonitor('redis', 'badcloud', 'bucket')
+        monitor = bucket_monitor.BucketMonitor('redis', 'bad', 'bucket', 'q')
         monitor.get_storage_api = DummyBucket
         uploads = monitor.get_all_uploads('prefix/')
         assert uploads == []
 
     def test_scan_bucket_for_new_uploads(self):
         redis_client = DummyRedis()
-        monitor = bucket_monitor.BucketMonitor(redis_client, 'gke', 'bucket')
+        monitor = bucket_monitor.BucketMonitor(
+            redis_client, 'gke', 'bucket', 'q')
         monitor.get_storage_api = DummyBucket
         monitor.scan_bucket_for_new_uploads(prefix='uploads/')
 
     def test_write_new_redis_key(self):
         redis_keys = 'uploads/directupload_previously_uploaded.tifothertext'
         redis_client = DummyRedis()
-        monitor = bucket_monitor.BucketMonitor(redis_client, 'gke', 'bucket')
+        monitor = bucket_monitor.BucketMonitor(
+            redis_client, 'gke', 'bucket', 'q')
 
         # test invalid web upload
         invalid_file = Bunch(path='uploads/web.tiff',
@@ -148,7 +152,8 @@ class TestBucketMonitor(object):
 
     def test_create_redis_entry(self):
         redis_client = DummyRedis()
-        monitor = bucket_monitor.BucketMonitor(redis_client, 'gke', 'bucket')
+        monitor = bucket_monitor.BucketMonitor(
+            redis_client, 'gke', 'bucket', 'q')
         monitor.get_storage_api = DummyBucket
 
         # test valid direct_upload file_name
@@ -171,7 +176,8 @@ class TestBucketMonitor(object):
 
         # test bad file_name
         redis_client = DummyRedis()
-        monitor = bucket_monitor.BucketMonitor(redis_client, 'gke', 'bucket')
+        monitor = bucket_monitor.BucketMonitor(
+            redis_client, 'gke', 'bucket', 'q')
         bad_fname = 'regular_filename.tiff'
         result = monitor.create_redis_entry(upload, bad_fname, bad_fname)
         assert result is False
