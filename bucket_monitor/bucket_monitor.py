@@ -39,7 +39,7 @@ import pytz
 from google.cloud import storage
 
 
-class BucketMonitor(object):  # pylint: disable=useless-object-inheritance
+class BucketMonitor(object):
     """Watches a bucket for new uploads and adds data for each to Redis."""
 
     def __init__(self, redis_client, cloud_provider, bucket_name):
