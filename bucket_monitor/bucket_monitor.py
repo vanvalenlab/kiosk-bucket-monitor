@@ -174,6 +174,7 @@ class BucketMonitor(object):
             return False
 
         self.redis_client.hmset(redis_key, field_dict)
+        self.redis_client.lpush(self.queue, redis_key)
         self.logger.debug('Wrote Redis entry of %s for %s.',
                           self.redis_client.hgetall(redis_key), redis_key)
         return True
