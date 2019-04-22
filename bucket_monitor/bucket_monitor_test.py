@@ -44,25 +44,19 @@ class DummyRedis(object):
     def __init__(self):
         self.hvals = {}
 
+    def lpush(self, *_, **__):
+        return True
+
     def keys(self):
         return [
         ]
 
-    def hmset(self, rhash, hvals):  # pylint: disable=W0613
+    def hmset(self, _, hvals):
         self.hvals = hvals
         return hvals
 
-    def hgetall(self, rhash):  # pylint: disable=W0613
+    def hgetall(self, _):
         return {
-            'model_name': 'model',
-            'model_version': '0',
-            'field': '61',
-            'cuts': '0',
-            'postprocess_function': '',
-            'preprocess_function': '',
-            'file_name': rhash.split('_')[-1],
-            'input_file_name': rhash.split('_')[-1],
-            'output_file_name': rhash.split('_')[-1]
         }
 
 
