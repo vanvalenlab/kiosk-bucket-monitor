@@ -35,7 +35,6 @@ import uuid
 import datetime
 import logging
 
-import pytz
 from google.cloud import storage
 
 
@@ -62,13 +61,13 @@ class BucketMonitor(object):
         self.HOSTNAME = os.environ['HOSTNAME']
 
         # get initial timestamp to act as a baseline, assuming UTC for everything
-        self.initial_timestamp = datetime.datetime.now(tz=pytz.UTC)
+        self.initial_timestamp = datetime.datetime.now(datetime.timezone.utc)
 
     def scan_bucket_for_new_uploads(self):
         self.logger.info('New loop at %s', self.initial_timestamp)
 
         # get a timestamp to mark the baseline for the next loop iteration
-        soon_to_be_baseline_timestamp = datetime.datetime.now(tz=pytz.UTC)
+        soon_to_be_baseline_timestamp = datetime.datetime.now(datetime.timezone.utc)
 
         # get references to every file starting with "uploads/"
         all_uploads_iterator = self.bucket.list_blobs(prefix='uploads/')
