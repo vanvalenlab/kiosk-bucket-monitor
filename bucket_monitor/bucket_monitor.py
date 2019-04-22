@@ -130,8 +130,8 @@ class BucketMonitor(object):  # pylint: disable=useless-object-inheritance
 
             # check for presence of filename in Redis already
             if upload_filename in self.combined_keys:
-                self.logger.warn('%s tried to get uploaded a second time.',
-                                 upload_filename)
+                self.logger.warning('%s tried to get uploaded a second time.',
+                                    upload_filename)
                 continue
 
             # check to see whether this is a special "benchmarking" direct
@@ -173,7 +173,8 @@ class BucketMonitor(object):  # pylint: disable=useless-object-inheritance
             field_dict['postprocess_function'] = fields.group(3)
             field_dict['cuts'] = fields.group(4)
         except AttributeError:
-            self.logger.warn('Failed on fields of %s.', modified_upload_filename)
+            self.logger.warning('Failed on fields of %s.',
+                                modified_upload_filename)
             return 0
 
         field_dict['identity_upload'] = self.HOSTNAME
