@@ -67,6 +67,7 @@ def initialize_logger(debug_mode=True):
 
 if __name__ == '__main__':
     INTERVAL = int(os.getenv('INTERVAL', '5'))
+    PREFIX = os.getenv('PREFIX', 'uploads/')
 
     initialize_logger(os.getenv('DEBUG'))
 
@@ -83,7 +84,7 @@ if __name__ == '__main__':
 
     while True:
         try:
-            MONITOR.scan_bucket_for_new_uploads()
+            MONITOR.scan_bucket_for_new_uploads(prefix=PREFIX)
             _logger.debug('Sleeping for %s seconds.', INTERVAL)
             time.sleep(INTERVAL)
         except Exception as err:  # pylint: disable=broad-except
