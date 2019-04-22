@@ -8,4 +8,4 @@ RUN pip install requirements.txt
 
 COPY . .
 
-CMD ["python", "bucket-monitor.py"]
+CMD ["python", "monitor-bucket.py"]
