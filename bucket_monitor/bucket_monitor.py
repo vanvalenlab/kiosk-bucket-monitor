@@ -82,7 +82,7 @@ class BucketMonitor(object):
         all_uploads = self.get_all_uploads(prefix=prefix)
 
         # get current redis keys to avoid double entries
-        redis_keys = set(self.redis_client.keys())
+        redis_keys = '\t'.join(self.redis_client.keys())  # TODO: O(n)
 
         for upload in all_uploads:
             if upload.name == prefix:
