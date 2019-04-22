@@ -56,10 +56,6 @@ class BucketMonitor(object):
         self.redis_client = redis_client
         self.logger = logging.getLogger(str(self.__class__.__name__))
 
-        # read in environment variables
-        self.INTERVAL = os.environ['INTERVAL']
-        self.HOSTNAME = os.environ['HOSTNAME']
-
         # get initial timestamp to act as a baseline, assuming UTC for everything
         self.initial_timestamp = datetime.datetime.now(datetime.timezone.utc)
 
@@ -176,7 +172,7 @@ class BucketMonitor(object):
                                 modified_upload_filename)
             return 0
 
-        field_dict['identity_upload'] = self.HOSTNAME
+        field_dict['identity_upload'] = os.getenv('HOSTNAME')
         field_dict['timestamp_upload'] = time.time() * 1000
 
         redis_key = 'predict_{}_{}'.format(
