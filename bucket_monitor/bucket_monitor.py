@@ -23,186 +23,154 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""Bucket Monitor Class"""
+"""BucketMonitor Class"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import os
 import re
-import time
 import uuid
 import datetime
 import logging
 
 from google.cloud import storage
+from google.cloud import exceptions as google_exceptions
 
 
 class BucketMonitor(object):
     """Watches a bucket for new uploads and adds data for each to Redis."""
 
     def __init__(self, redis_client, cloud_provider, bucket_name):
-        # establish cloud connection
-        if cloud_provider == 'gke':
-            self.bucket_client = storage.Client()
-            self.bucket = self.bucket_client.get_bucket(bucket_name)
-        elif cloud_provider == 'aws':
-            raise NotImplementedError('{} does not yet support {}.'.format(
-                self.__class__.__name__, cloud_provider))
-        else:
-            raise ValueError('Invalid value for `cloud_provider`: {}.'.format(
-                cloud_provider))
-
         self.redis_client = redis_client
+        self.bucket_name = bucket_name
+        self.cloud_provider = str(cloud_provider).lower()
+
+        self.fmt = '%b %d, %Y %H:%M:%S.%f'  # configure datetime string format
         self.logger = logging.getLogger(str(self.__class__.__name__))
 
-        # get initial timestamp to act as a baseline, assuming UTC for everything
-        self.initial_timestamp = datetime.datetime.now(datetime.timezone.utc)
+        # get initial timestamp to act as a baseline, assume UTC for everything
+        self.current_timestamp = datetime.datetime.now(datetime.timezone.utc)
 
-    def scan_bucket_for_new_uploads(self):
-        self.logger.info('New loop at %s', self.initial_timestamp)
+    def get_storage_api(self):
+        if self.cloud_provider == 'gke':
+            return storage.Client()
+        elif self.cloud_provider == 'aws':
+            raise NotImplementedError('{} does not yet support `{}`.'.format(
+                self.__class__.__name__, self.cloud_provider))
+        else:
+            raise ValueError('Invalid value for `cloud_provider`: {}.'.format(
+                self.cloud_provider))
 
+    def get_all_uploads(self, prefix=None):
+        all_uploads = []
+        if self.cloud_provider == 'gke':
+            client = self.get_storage_api()
+            bucket = client.get_bucket(self.bucket_name)
+            all_uploads = bucket.list_blobs(prefix=prefix)
+        elif self.cloud_provider == 'aws':
+            raise NotImplementedError('{} does not yet support `{}`.'.format(
+                self.__class__.__name__, self.cloud_provider))
+        return all_uploads
+
+    def scan_bucket_for_new_uploads(self, prefix='uploads/'):
         # get a timestamp to mark the baseline for the next loop iteration
         next_timestamp = datetime.datetime.now(datetime.timezone.utc)
+        self.logger.info('New loop at %s', next_timestamp.strftime(self.fmt))
 
-        # get references to every file starting with `uploads/`
-        all_uploads_iterator = self.bucket.list_blobs(prefix='uploads/')
-        all_uploads = list(all_uploads_iterator)
+        # get references to every file starting with `prefix`
+        all_uploads = self.get_all_uploads(prefix=prefix)
 
-        # the oldest one is going to be the `uploads/` folder, so remove that
-        upload_times = [u.updated for u in all_uploads]
+        # get current redis keys to avoid double entries
+        redis_keys = set(self.redis_client.keys())
 
-        try:
-            earliest_upload = min(upload_times)
-        except ValueError:
-            self.logger.error('There may not be any folder with the '
-                              'chosen prefix (`uploads/` by default).')
-
-        uploads_length = len(all_uploads)
-        upload_times_length = len(upload_times)
         for upload in all_uploads:
-            if upload.updated == earliest_upload:
-                all_uploads.remove(upload)
-                upload_times.remove(earliest_upload)
+            if upload.name == prefix:
+                continue  # no need to process the prefix directory
 
-        # make sure we only removed one entry
-        assert len(all_uploads) == uploads_length - 1
-        assert len(upload_times) == upload_times_length - 1
+            # only process files uploaded between now and last iteration
+            if upload.updated > self.current_timestamp:
+                self.logger.info('Found new upload: %s', upload.name)
+                # parse necessary information from the filename
+                # and write an appropriate entry to Redis
+                self.write_new_redis_key(upload, redis_keys)
 
-        # keep only the files whose timestamps lie between now and the last
-        # iteration of this loop
-        self.new_uploads = []
-        for upload in all_uploads:
-            if upload.updated > self.initial_timestamp:
-                self.new_uploads.append(upload)
-                self.logger.info('Found new upload: %s', upload)
+        self.current_timestamp = next_timestamp  # update baseline timestamp
 
-        # for each of these new uploads, parse necessary information from the
-        # filename and write an appropriate entry to Redis
-        # Before writing, also check that no hash already in Redis contains
-        # this file's name. (We seem to have a problem with double
-        # entries in Redis.)
-        keys = self.redis_client.keys()
-        self.combined_keys = '\t'.join(keys)
-
-        self._write_new_redis_keys()
-
-        # update baseline timestamp
-        self.initial_timestamp = next_timestamp
-
-    def _write_new_redis_keys(self):
+    def write_new_redis_key(self, upload, redis_keys):
         filename_pattern = '(uploads(?:/|%2F))(directupload_.+)$'
-        for upload in self.new_uploads:
-            # verify the upload is a direct upload, and not a web upload
-            try:
-                re_results = re.search(filename_pattern, upload.path)
-                upload_filename = re_results.group(2)
-            except AttributeError as err:
-                # this isn't a directly uploaded file
-                # or its filename was formatted incorrectly
-                self.logger.debug('Failed on filename of %s. Error: %s: %s',
-                                  upload.path, type(err).__name__, err)
-                continue
+        # verify the upload is a direct upload, and not a web upload
+        try:
+            re_results = re.search(filename_pattern, upload.path)
+            upload_filename = re_results.group(2)
+        except AttributeError as err:
+            # this isn't a directly uploaded file
+            # or its filename was formatted incorrectly
+            self.logger.error('Failed on filename of %s. Error: %s: %s',
+                              upload.name, type(err).__name__, err)
+            return 0
 
-            # check for presence of filename in Redis already
-            if upload_filename in self.combined_keys:
-                self.logger.warning('%s tried to get uploaded a second time.',
-                                    upload_filename)
-                continue
+        # check for presence of filename in Redis already
+        if upload_filename in redis_keys:
+            self.logger.warning('%s tried to get uploaded a second time.',
+                                upload_filename)
+            return 0
 
-            # is this a special "benchmark" direct upload?
-            benchmark_pattern = 'benchmarking([0-9]+)special'
-            benchmark_result = re.search(benchmark_pattern, upload_filename)
-            if benchmark_result is None:
-                # standard direct upload
-                self._create_single_redis_entry(
-                    upload, upload_filename, upload_filename)
-            else:
-                # "benchmarking" direct upload
-                self._create_multiple_redis_entries(
-                    upload=upload,
-                    upload_filename=upload_filename,
-                    count=benchmark_result.group(1))
+        # is this a special "benchmark" direct upload?
+        benchmark_pattern = 'benchmarking([0-9]+)special'
+        benchmark_result = re.search(benchmark_pattern, upload_filename)
+        if benchmark_result is None:
+            # standard direct upload
+            self.create_redis_entry(upload, upload_filename, upload_filename)
+            return 1
 
-    def _create_multiple_redis_entries(self, upload, upload_filename, count):
-        """Makes `count` redis entries based on the `upload_filename`.
-
-        Args:
-            upload: object representing item in storage bucket
-            upload_filename: string, name of uploaded file
-            count: int, number of redis entries to create
-        """
+        # "benchmarking" direct upload
         base, ext = os.path.splitext(upload_filename)
-        for i in range(int(count)):
-            filename = '{basename}{uid}{ext}'.format(
+        count = int(benchmark_result.group(1))
+        for i in range(count):
+            new_filename = '{basename}{uid}{ext}'.format(
                 basename=base, uid=i, ext=ext)
+            self.create_redis_entry(upload, new_filename, upload_filename)
+        return count
 
-            self._create_single_redis_entry(upload, filename, upload_filename)
-
-    def parse_filename_fields(self, fname):
-        # filename schema: modelname_modelversion_ppfunc_cuts_etc
-        pattern = 'directupload_([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+$'
-        fields = re.search(pattern, fname)
-        return {
-            'model_name': fields.group(1),
-            'model_version': fields.group(2),
-            'postprocess_function': fields.group(3),
-            'cuts': fields.group(4)
-        }
-
-    def _create_single_redis_entry(self, upload, modified_upload_filename,
-                                   unmodified_upload_filename):
-        """Makes `count` redis entries based on the `upload_filename`.
+    def create_redis_entry(self, upload, modified_filename, original_filename):
+        """Creates a redis entry based on the `upload_filename`.
 
         Args:
             upload: object representing item in storage bucket
-            modified_upload_filename: string, updated uploaded file name
-            upload_filename: string, name of uploaded file
+            modified_filename: string, updated uploaded file name for benchmark
+            original_filename: string, name of original uploaded file
             count: int, number of redis entries to create
         """
         # create a unique redis key
         redis_key = '{prefix}_{unique_id}_{filename}'.format(
             prefix='predict',
             unique_id=uuid.uuid4().hex,
-            filename=modified_upload_filename)
+            filename=modified_filename)
 
         # create the new redis key's fields and values
-        fmt = '%b %d, %Y %H:%M:%S.%f'
         field_dict = {
             'status': 'new',
             'url': upload.public_url,
-            'input_file_name': 'uploads/%s' % unmodified_upload_filename,
+            'input_file_name': 'uploads/%s' % original_filename,
             'identity_upload': os.getenv('HOSTNAME'),
             'created_at':
-                datetime.datetime.now(datetime.timezone.utc).strftime(fmt)
+                datetime.datetime.now(datetime.timezone.utc).strftime(self.fmt)
         }
 
         try:
-            new_fields = self.parse_filename_fields(unmodified_upload_filename)
-            field_dict.update(new_fields)
+            # filename schema: modelname_modelversion_ppfunc_cuts_etc
+            pattern = 'directupload_([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_.+$'
+            fields = re.search(pattern, original_filename)
+            field_dict.update({
+                'model_name': fields.group(1),
+                'model_version': fields.group(2),
+                'postprocess_function': fields.group(3),
+                'cuts': fields.group(4)
+            })
         except AttributeError:
             self.logger.error('Failed to parse fields from filename: `%s`.',
-                              unmodified_upload_filename)
+                              original_filename)
             return False
 
         self.redis_client.hmset(redis_key, field_dict)
