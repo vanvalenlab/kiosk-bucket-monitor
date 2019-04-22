@@ -69,6 +69,8 @@ class DummyBucket(object):
 
     def list_blobs(self, prefix):
         return [
+            Bunch(name=prefix,
+                  updated=datetime.datetime.now(datetime.timezone.utc)),
             Bunch(name='%sfile.tiff' % prefix,
                   updated=datetime.datetime.now(datetime.timezone.utc)),
             Bunch(name='%sfile.zip' % prefix,
