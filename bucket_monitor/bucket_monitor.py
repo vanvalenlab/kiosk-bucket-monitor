@@ -35,7 +35,6 @@ import datetime
 import logging
 
 from google.cloud import storage
-from google.cloud import exceptions as google_exceptions
 
 
 class BucketMonitor(object):
