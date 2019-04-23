@@ -30,6 +30,7 @@ from __future__ import print_function
 
 import datetime
 
+import pytz
 import pytest
 
 import bucket_monitor
@@ -70,11 +71,11 @@ class DummyBucket(object):
     def list_blobs(self, prefix):
         return [
             Bunch(name=prefix,
-                  updated=datetime.datetime.utcnow()),
+                  updated=datetime.datetime.now(pytz.UTC)),
             Bunch(name='%sfile.tiff' % prefix,
-                  updated=datetime.datetime.utcnow()),
+                  updated=datetime.datetime.now(pytz.UTC)),
             Bunch(name='%sfile.zip' % prefix,
-                  updated=datetime.datetime.utcnow())
+                  updated=datetime.datetime.now(pytz.UTC))
         ]
 
 

@@ -34,6 +34,7 @@ import uuid
 import datetime
 import logging
 
+import pytz
 from google.cloud import storage
 
 
@@ -48,7 +49,7 @@ class BucketMonitor(object):
         self.logger = logging.getLogger(str(self.__class__.__name__))
 
         # get initial timestamp to act as a baseline, assume UTC for everything
-        self.current_timestamp = datetime.datetime.utcnow()
+        self.current_timestamp = datetime.datetime.now(pytz.UTC)
 
     def get_storage_api(self):
         if self.cloud_provider == 'gke':
@@ -73,7 +74,7 @@ class BucketMonitor(object):
 
     def scan_bucket_for_new_uploads(self, prefix='uploads/'):
         # get a timestamp to mark the baseline for the next loop iteration
-        next_timestamp = datetime.datetime.utcnow()
+        next_timestamp = datetime.datetime.now(pytz.UTC)
         self.logger.info('New loop at %s', next_timestamp.isoformat())
 
         # get references to every file starting with `prefix`
@@ -152,8 +153,8 @@ class BucketMonitor(object):
             'url': upload.public_url,
             'input_file_name': 'uploads/%s' % original_filename,
             'identity_upload': os.getenv('HOSTNAME'),
-            'created_at': datetime.datetime.utcnow().isoformat(),
-            'updated_at': datetime.datetime.utcnow().isoformat()
+            'created_at': datetime.datetime.now(pytz.UTC).isoformat(),
+            'updated_at': datetime.datetime.now(pytz.UTC).isoformat(),
         }
 
         try:
