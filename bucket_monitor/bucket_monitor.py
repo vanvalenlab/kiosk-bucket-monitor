@@ -45,12 +45,10 @@ class BucketMonitor(object):
         self.bucket_name = bucket_name
         self.queue = str(queue).lower()
         self.cloud_provider = str(cloud_provider).lower()
-
-        self.fmt = '%b %d, %Y %H:%M:%S.%f'  # configure datetime string format
         self.logger = logging.getLogger(str(self.__class__.__name__))
 
         # get initial timestamp to act as a baseline, assume UTC for everything
-        self.current_timestamp = datetime.datetime.now(datetime.timezone.utc)
+        self.current_timestamp = datetime.datetime.utcnow()
 
     def get_storage_api(self):
         if self.cloud_provider == 'gke':
@@ -75,8 +73,8 @@ class BucketMonitor(object):
 
     def scan_bucket_for_new_uploads(self, prefix='uploads/'):
         # get a timestamp to mark the baseline for the next loop iteration
-        next_timestamp = datetime.datetime.now(datetime.timezone.utc)
-        self.logger.info('New loop at %s', next_timestamp.strftime(self.fmt))
+        next_timestamp = datetime.datetime.utcnow()
+        self.logger.info('New loop at %s', next_timestamp.isoformat())
 
         # get references to every file starting with `prefix`
         all_uploads = self.get_all_uploads(prefix=prefix)
@@ -154,8 +152,8 @@ class BucketMonitor(object):
             'url': upload.public_url,
             'input_file_name': 'uploads/%s' % original_filename,
             'identity_upload': os.getenv('HOSTNAME'),
-            'created_at':
-                datetime.datetime.now(datetime.timezone.utc).strftime(self.fmt)
+            'created_at': datetime.datetime.utcnow().isoformat(),
+            'updated_at': datetime.datetime.utcnow().isoformat()
         }
 
         try:

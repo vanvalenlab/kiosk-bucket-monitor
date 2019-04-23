@@ -70,11 +70,11 @@ class DummyBucket(object):
     def list_blobs(self, prefix):
         return [
             Bunch(name=prefix,
-                  updated=datetime.datetime.now(datetime.timezone.utc)),
+                  updated=datetime.datetime.utcnow()),
             Bunch(name='%sfile.tiff' % prefix,
-                  updated=datetime.datetime.now(datetime.timezone.utc)),
+                  updated=datetime.datetime.utcnow()),
             Bunch(name='%sfile.zip' % prefix,
-                  updated=datetime.datetime.now(datetime.timezone.utc))
+                  updated=datetime.datetime.utcnow())
         ]
 
 
