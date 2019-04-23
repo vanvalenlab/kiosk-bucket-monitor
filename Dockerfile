@@ -33,4 +33,4 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-CMD ["/bin/sh", "-c", "python", "monitor-bucket.py"]
+CMD ["python", "monitor-bucket.py"]
