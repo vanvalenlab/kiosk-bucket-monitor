@@ -75,7 +75,7 @@ class BucketMonitor(object):
     def scan_bucket_for_new_uploads(self, prefix='uploads/'):
         # get a timestamp to mark the baseline for the next loop iteration
         next_timestamp = datetime.datetime.now(pytz.UTC)
-        self.logger.info('New loop at %s', next_timestamp.isoformat())
+        self.logger.info('New loop at %s', next_timestamp)
 
         # get references to every file starting with `prefix`
         all_uploads = self.get_all_uploads(prefix=prefix)
@@ -153,8 +153,8 @@ class BucketMonitor(object):
             'url': upload.public_url,
             'input_file_name': 'uploads/%s' % original_filename,
             'identity_upload': os.getenv('HOSTNAME'),
-            'created_at': datetime.datetime.now(pytz.UTC).isoformat(),
-            'updated_at': datetime.datetime.now(pytz.UTC).isoformat(),
+            'created_at': datetime.datetime.now(pytz.UTC).isoformat(' '),
+            'updated_at': datetime.datetime.now(pytz.UTC).isoformat(' '),
         }
 
         try:
