@@ -23,14 +23,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-FROM python:3.6-alpine
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
-WORKDIR /usr/src/app
+from bucket_monitor import redis
 
-COPY requirements.txt .
+from bucket_monitor.bucket_monitor import BucketMonitor
+from bucket_monitor.redis import RedisClient
 
-RUN pip install -r requirements.txt
-
-COPY . .
-
-CMD ["/bin/sh", "-c", "python monitor-bucket.py"]
+del absolute_import
+del division
+del print_function
