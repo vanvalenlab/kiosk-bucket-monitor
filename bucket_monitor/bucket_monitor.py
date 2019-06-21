@@ -142,7 +142,7 @@ class BucketMonitor(object):
             count: int, number of redis entries to create
         """
         # create a unique redis key
-        redis_key = '{prefix}_{unique_id}_{filename}'.format(
+        redis_key = '{prefix}:{unique_id}:{filename}'.format(
             prefix='predict',
             unique_id=uuid.uuid4().hex,
             filename=modified_filename)
