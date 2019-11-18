@@ -71,11 +71,14 @@ class DummyBucket(object):
     def list_blobs(self, prefix):
         return [
             Bunch(name=prefix,
-                  updated=datetime.datetime.now(pytz.UTC)),
+                  updated=datetime.datetime.now(pytz.UTC),
+                  delete=lambda: True),
             Bunch(name='%sfile.tiff' % prefix,
-                  updated=datetime.datetime.now(pytz.UTC)),
+                  updated=datetime.datetime.now(pytz.UTC),
+                  delete=lambda: True),
             Bunch(name='%sfile.zip' % prefix,
-                  updated=datetime.datetime.now(pytz.UTC))
+                  updated=datetime.datetime.now(pytz.UTC),
+                  delete=lambda: True)
         ]
 
 
@@ -211,3 +214,14 @@ class TestBucketMonitor(object):
         result = monitor.create_redis_entry(upload, bad_fname, bad_fname)
         assert result is False
         assert redis_client.hvals == {}
+
+
+class TestStaleFileBucketMonitor(object):
+
+    def test_scan_bucket_for_stale_files(self):
+        monitor = bucket_monitor.StaleFileBucketMonitor(
+            cloud_provider='gke',
+            bucket_name='bucket')
+        monitor.get_storage_api = DummyBucket
+        monitor.scan_bucket_for_stale_files(
+            prefix='uploads/', threshold=-1)

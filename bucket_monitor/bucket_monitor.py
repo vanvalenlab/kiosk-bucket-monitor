@@ -91,8 +91,7 @@ class BucketMonitor(BaseBucketMonitor):
         # get initial timestamp to act as a baseline, assume UTC for everything
         self.current_timestamp = datetime.datetime.now(pytz.UTC)
 
-        super(BucketMonitor, self).__init__(
-            redis_client, cloud_provider, bucket_name)
+        super(BucketMonitor, self).__init__(cloud_provider, bucket_name)
 
     def scan_bucket_for_new_uploads(self, prefix='uploads/'):
         # get a timestamp to mark the baseline for the next loop iteration
@@ -199,3 +198,35 @@ class BucketMonitor(BaseBucketMonitor):
         self.logger.debug('Wrote Redis entry of %s for %s.',
                           self.redis_client.hgetall(redis_key), redis_key)
         return True
+
+
+class StaleFileBucketMonitor(BaseBucketMonitor):
+    """Watches a bucket for new uploads and adds data for each to Redis."""
+
+    def scan_bucket_for_stale_files(self,
+                                    prefix='uploads/',
+                                    threshold=7 * 24 * 60 * 60):
+        """Remove stale files in bucket with the given prefix
+
+        Args:
+            prefix (str): The prefix/folder to look for stale files.
+            threshold (int): The maximum allowed age of files, in seconds.
+        """
+        prefix = '{}/'.format(prefix) if not prefix.endswith('/') else prefix
+
+        current_timestamp = datetime.datetime.now(pytz.UTC)
+
+        # get references to every file starting with `prefix`
+        all_files = self.get_all_files(prefix=prefix)
+
+        for f in all_files:
+            if f.name == prefix:
+                continue  # no need to process the prefix directory
+
+            age_in_seconds = (current_timestamp - f.updated).total_seconds()
+
+            if age_in_seconds > threshold:
+                self.logger.info('Found file %s which is %s seconds old.',
+                                 f.name, age_in_seconds)
+                f.delete()  # delete the file, cannot be undone
+                self.logger.info('Successfully deleted file %s.', f.name)
