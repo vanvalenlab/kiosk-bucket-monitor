@@ -102,5 +102,5 @@ if __name__ == '__main__':
                 _logger.critical('Fatal Error: %s: %s', type(err).__name__, err)
                 _logger.critical(traceback.format_exc())
                 sys.exit(1)
-            _logger.debug('Sleeping for %s seconds.', INTERVAL)
-            time.sleep(INTERVAL)
+        _logger.debug('Sleeping for %s seconds.', INTERVAL)
+        time.sleep(INTERVAL)
