@@ -67,30 +67,40 @@ def initialize_logger(debug_mode=True):
 
 
 if __name__ == '__main__':
-    INTERVAL = int(os.getenv('INTERVAL', '5'))
-    PREFIX = os.getenv('PREFIX', 'uploads/')
-    QUEUE = os.getenv('QUEUE', 'predict')
+    INTERVAL = int(os.getenv('INTERVAL', '21600'))
+    PREFIXES = os.getenv('PREFIX', 'uploads/,output/').split(',')
+    AGE_THRESHOLD = int(os.getenv('AGE_THRESHOLD', str(3 * 24 * 60 * 60)))
 
     initialize_logger(os.getenv('DEBUG'))
 
     _logger = logging.getLogger(__file__)
 
-    REDIS = bucket_monitor.redis.RedisClient(
-        os.getenv('REDIS_HOST'),
-        os.getenv('REDIS_PORT'))
+    # No longer using BucketMonitor to add keys to Redis.
+    # Instead, use a StaleFileBucketMonitor to prune stale files in the bucket.
 
-    MONITOR = bucket_monitor.BucketMonitor(
-        redis_client=REDIS,
+    # REDIS = bucket_monitor.redis.RedisClient(
+    #     os.getenv('REDIS_HOST'),
+    #     os.getenv('REDIS_PORT'))
+    #
+    # MONITOR = bucket_monitor.BucketMonitor(
+    #     redis_client=REDIS,
+    #     cloud_provider=os.getenv('CLOUD_PROVIDER'),
+    #     bucket_name=os.getenv('BUCKET'),
+    #     queue=os.getenv('QUEUE', 'predict'))
+
+    MONITOR = bucket_monitor.StaleFileBucketMonitor(
         cloud_provider=os.getenv('CLOUD_PROVIDER'),
-        bucket_name=os.getenv('BUCKET'),
-        queue=QUEUE)
+        bucket_name=os.getenv('BUCKET'))
 
     while True:
-        try:
-            MONITOR.scan_bucket_for_new_uploads(prefix=PREFIX)
-            _logger.debug('Sleeping for %s seconds.', INTERVAL)
-            time.sleep(INTERVAL)
-        except Exception as err:  # pylint: disable=broad-except
-            _logger.critical('Fatal Error: %s: %s', type(err).__name__, err)
-            _logger.critical(traceback.format_exc())
-            sys.exit(1)
+        for prefix in PREFIXES:
+            try:
+                # MONITOR.scan_bucket_for_new_uploads(prefix=prefix)
+                MONITOR.scan_bucket_for_stale_files(
+                    prefix=prefix, threshold=AGE_THRESHOLD)
+            except Exception as err:  # pylint: disable=broad-except
+                _logger.critical('Fatal Error: %s: %s', type(err).__name__, err)
+                _logger.critical(traceback.format_exc())
+                sys.exit(1)
+        _logger.debug('Sleeping for %s seconds.', INTERVAL)
+        time.sleep(INTERVAL)
