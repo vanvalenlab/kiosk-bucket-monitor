@@ -98,9 +98,9 @@ if __name__ == '__main__':
                 # MONITOR.scan_bucket_for_new_uploads(prefix=prefix)
                 MONITOR.scan_bucket_for_stale_files(
                     prefix=prefix, threshold=AGE_THRESHOLD)
-                _logger.debug('Sleeping for %s seconds.', INTERVAL)
-                time.sleep(INTERVAL)
             except Exception as err:  # pylint: disable=broad-except
                 _logger.critical('Fatal Error: %s: %s', type(err).__name__, err)
                 _logger.critical(traceback.format_exc())
                 sys.exit(1)
+            _logger.debug('Sleeping for %s seconds.', INTERVAL)
+            time.sleep(INTERVAL)
