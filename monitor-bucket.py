@@ -75,20 +75,29 @@ if __name__ == '__main__':
 
     _logger = logging.getLogger(__file__)
 
-    REDIS = bucket_monitor.redis.RedisClient(
-        os.getenv('REDIS_HOST'),
-        os.getenv('REDIS_PORT'))
+    # No longer using BucketMonitor to add keys to Redis.
+    # Instead, use a StaleFileBucketMonitor to prune stale files in the bucket.
 
-    MONITOR = bucket_monitor.BucketMonitor(
-        redis_client=REDIS,
+    # REDIS = bucket_monitor.redis.RedisClient(
+    #     os.getenv('REDIS_HOST'),
+    #     os.getenv('REDIS_PORT'))
+    #
+    # MONITOR = bucket_monitor.BucketMonitor(
+    #     redis_client=REDIS,
+    #     cloud_provider=os.getenv('CLOUD_PROVIDER'),
+    #     bucket_name=os.getenv('BUCKET'),
+    #     queue=os.getenv('QUEUE', 'predict'))
+
+    MONITOR = bucket_monitor.StaleFileBucketMonitor(
         cloud_provider=os.getenv('CLOUD_PROVIDER'),
-        bucket_name=os.getenv('BUCKET'),
-        queue=QUEUE)
+        bucket_name=os.getenv('BUCKET'))
 
     while True:
         for prefix in PREFIXES:
             try:
-                MONITOR.scan_bucket_for_new_uploads(prefix=prefix)
+                # MONITOR.scan_bucket_for_new_uploads(prefix=prefix)
+                MONITOR.scan_bucket_for_stale_files(
+                    prefix=prefix, threshold=AGE_THRESHOLD)
                 _logger.debug('Sleeping for %s seconds.', INTERVAL)
                 time.sleep(INTERVAL)
             except Exception as err:  # pylint: disable=broad-except
