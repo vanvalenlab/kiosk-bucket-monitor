@@ -29,6 +29,7 @@ from __future__ import print_function
 
 from bucket_monitor import redis
 
+from bucket_monitor.bucket_monitor import BaseBucketMonitor
 from bucket_monitor.bucket_monitor import BucketMonitor
 from bucket_monitor.redis import RedisClient
 

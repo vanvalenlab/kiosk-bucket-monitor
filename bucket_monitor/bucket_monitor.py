@@ -38,30 +38,30 @@ import pytz
 from google.cloud import storage
 
 
-class BucketMonitor(object):
-    """Watches a bucket for new uploads and adds data for each to Redis."""
+class BaseBucketMonitor(object):  # pylint: disable=useless-object-inheritance
+    """Base BucketMonitor class.
 
-    def __init__(self, redis_client, cloud_provider, bucket_name, queue):
-        self.redis_client = redis_client
+    Args:
+        cloud_provider (str): Storage bucket cloud platform,
+            one of "aws" or "gke".
+        bucket_name (str): The name of the stoage bucket.
+    """
+
+    def __init__(self, cloud_provider, bucket_name):
         self.bucket_name = bucket_name
-        self.queue = str(queue).lower()
         self.cloud_provider = str(cloud_provider).lower()
         self.logger = logging.getLogger(str(self.__class__.__name__))
-
-        # get initial timestamp to act as a baseline, assume UTC for everything
-        self.current_timestamp = datetime.datetime.now(pytz.UTC)
 
     def get_storage_api(self):
         if self.cloud_provider == 'gke':
             return storage.Client()
-        elif self.cloud_provider == 'aws':
+        if self.cloud_provider == 'aws':
             raise NotImplementedError('{} does not yet support `{}`.'.format(
                 self.__class__.__name__, self.cloud_provider))
-        else:
-            raise ValueError('Invalid value for `cloud_provider`: {}.'.format(
-                self.cloud_provider))
+        raise ValueError('Invalid value for `cloud_provider`: {}.'.format(
+            self.cloud_provider))
 
-    def get_all_uploads(self, prefix=None):
+    def get_all_files(self, prefix=None):
         all_uploads = []
         if self.cloud_provider == 'gke':
             client = self.get_storage_api()
@@ -72,13 +72,35 @@ class BucketMonitor(object):
                 self.__class__.__name__, self.cloud_provider))
         return all_uploads
 
+
+class BucketMonitor(BaseBucketMonitor):
+    """Watches a bucket for new uploads and adds data for each to Redis.
+
+    Args:
+        redis_client (obj): Redis client object for communicating with redis.
+        cloud_provider (str): Storage bucket cloud platform,
+            one of "aws" or "gke".
+        bucket_name (str): The name of the stoage bucket.
+        queue (str): The redis queue name to add new jobs.
+    """
+
+    def __init__(self, redis_client, cloud_provider, bucket_name, queue):
+        self.redis_client = redis_client
+        self.queue = str(queue).lower()
+
+        # get initial timestamp to act as a baseline, assume UTC for everything
+        self.current_timestamp = datetime.datetime.now(pytz.UTC)
+
+        super(BucketMonitor, self).__init__(
+            redis_client, cloud_provider, bucket_name)
+
     def scan_bucket_for_new_uploads(self, prefix='uploads/'):
         # get a timestamp to mark the baseline for the next loop iteration
         next_timestamp = datetime.datetime.now(pytz.UTC)
         self.logger.info('New loop at %s', next_timestamp)
 
         # get references to every file starting with `prefix`
-        all_uploads = self.get_all_uploads(prefix=prefix)
+        all_uploads = self.get_all_files(prefix=prefix)
 
         # get current redis keys to avoid double entries
         redis_keys = '\t'.join(self.redis_client.keys())  # TODO: O(n)
