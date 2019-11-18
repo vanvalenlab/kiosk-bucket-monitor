@@ -67,9 +67,9 @@ def initialize_logger(debug_mode=True):
 
 
 if __name__ == '__main__':
-    INTERVAL = int(os.getenv('INTERVAL', '5'))
-    PREFIX = os.getenv('PREFIX', 'uploads/')
-    QUEUE = os.getenv('QUEUE', 'predict')
+    INTERVAL = int(os.getenv('INTERVAL', '21600'))
+    PREFIXES = os.getenv('PREFIX', 'uploads/,output/').split(',')
+    AGE_THRESHOLD = int(os.getenv('AGE_THRESHOLD', str(3 * 24 * 60 * 60)))
 
     initialize_logger(os.getenv('DEBUG'))
 
@@ -86,11 +86,12 @@ if __name__ == '__main__':
         queue=QUEUE)
 
     while True:
-        try:
-            MONITOR.scan_bucket_for_new_uploads(prefix=PREFIX)
-            _logger.debug('Sleeping for %s seconds.', INTERVAL)
-            time.sleep(INTERVAL)
-        except Exception as err:  # pylint: disable=broad-except
-            _logger.critical('Fatal Error: %s: %s', type(err).__name__, err)
-            _logger.critical(traceback.format_exc())
-            sys.exit(1)
+        for prefix in PREFIXES:
+            try:
+                MONITOR.scan_bucket_for_new_uploads(prefix=prefix)
+                _logger.debug('Sleeping for %s seconds.', INTERVAL)
+                time.sleep(INTERVAL)
+            except Exception as err:  # pylint: disable=broad-except
+                _logger.critical('Fatal Error: %s: %s', type(err).__name__, err)
+                _logger.critical(traceback.format_exc())
+                sys.exit(1)
