@@ -7,7 +7,7 @@ The `StaleFileBucketMonitor` is used to remove files from the DeepCell Kiosk clo
 
 ## Configuration
 
-The bucket monitor is configured using environment variables. Please find a table of all environment variables and their description below.
+The bucket monitor is configured using environment variables. Please find a table of all environment variables and their descriptions below.
 
 | Name | Description | Default Value |
 | :---: | :---: | :---: |
