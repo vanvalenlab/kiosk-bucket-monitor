@@ -11,7 +11,7 @@ The bucket monitor is configured using environment variables. Please find a tabl
 
 | Name | Description | Default Value |
 | :---: | :---: | :---: |
-| `BUCKET` | The name of the bucket to monitor. | *REQUIRED* |
+| `BUCKET` | The name of the bucket to monitor. | **REQUIRED** |
 | `AGE_THRESHOLD` | Files are removed if they are older than this many seconds. | 259,200 |
 | `CLOUD_PROVIDER` | The cloud provider hosting the DeepCell Kiosk | "gke" |
 | `INTERVAL` | How frequently the bucket is monitored, in seconds. | 21,600 |
