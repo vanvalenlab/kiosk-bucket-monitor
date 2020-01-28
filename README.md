@@ -10,7 +10,7 @@ The `StaleFileBucketMonitor` is used to remove files from the DeepCell Kiosk clo
 The bucket monitor is configured using environment variables. Please find a table of all environment variables and their description below.
 
 | Variable Name | Description | Default |
-| :--- | :---: | :--- |
+| :---: | :---: | :---: |
 | `AGE_THRESHOLD` | Files are removed if they are older than this many seconds. | 259,200 |
 | `BUCKET` | The name of the bucket to monitor. |
 | `CLOUD_PROVIDER` | The cloud provider hosting the DeepCell Kiosk | "gke" |
