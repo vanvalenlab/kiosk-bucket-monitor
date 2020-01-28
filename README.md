@@ -3,11 +3,16 @@
 [![Build Status](https://travis-ci.com/vanvalenlab/kiosk-bucket-monitor.svg?branch=master)](https://travis-ci.com/vanvalenlab/kiosk-bucket-monitor)
 [![Coverage Status](https://coveralls.io/repos/github/vanvalenlab/kiosk-bucket-monitor/badge.svg?branch=master)](https://coveralls.io/github/vanvalenlab/kiosk-bucket-monitor?branch=master)
 
-Monitor cloud bucket and write entries to Redis.
+The `StaleFileBucketMonitor` is used to remove files from the DeepCell Kiosk cloud storage bucket. This helps to save costs by preventing files from being stored in the bucket indefinitely.
 
-TODO
-gke credentials?
-aws support
-document filename schema
-add training support?
-grpc?
+## Configuration
+
+The bucket monitor is configured using environment variables. Please find a table of all environment variables and their description below.
+
+| Name | Description | Default Value |
+| :---: | :---: | :---: |
+| `BUCKET` | The name of the bucket to monitor. | **REQUIRED** |
+| `AGE_THRESHOLD` | Files are removed if they are older than this many seconds. | 259,200 |
+| `CLOUD_PROVIDER` | The cloud provider hosting the DeepCell Kiosk | "gke" |
+| `INTERVAL` | How frequently the bucket is monitored, in seconds. | 21,600 |
+| `PREFIXES` | A comma separated string of the bucket's directories to monitor. | "uploads/,output/" |
