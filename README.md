@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.com/vanvalenlab/kiosk-bucket-monitor.svg?branch=master)](https://travis-ci.com/vanvalenlab/kiosk-bucket-monitor)
 [![Coverage Status](https://coveralls.io/repos/github/vanvalenlab/kiosk-bucket-monitor/badge.svg?branch=master)](https://coveralls.io/github/vanvalenlab/kiosk-bucket-monitor?branch=master)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/vanvalenlab/kiosk-bucket-monitor/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](/LICENSE)
 
 The `StaleFileBucketMonitor` is used to remove files from the DeepCell Kiosk cloud storage bucket. This helps to save costs by preventing files from being stored in the bucket indefinitely.
 
