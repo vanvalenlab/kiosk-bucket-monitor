@@ -1,10 +1,10 @@
-# kiosk-bucket-monitor
+# ![DeepCell Kiosk Banner](https://raw.githubusercontent.com/vanvalenlab/kiosk-console/master/docs/images/DeepCell_Kiosk_Banner.png)
 
 [![Build Status](https://travis-ci.com/vanvalenlab/kiosk-bucket-monitor.svg?branch=master)](https://travis-ci.com/vanvalenlab/kiosk-bucket-monitor)
 [![Coverage Status](https://coveralls.io/repos/github/vanvalenlab/kiosk-bucket-monitor/badge.svg?branch=master)](https://coveralls.io/github/vanvalenlab/kiosk-bucket-monitor?branch=master)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](/LICENSE)
 
-The `StaleFileBucketMonitor` is used to remove files from the DeepCell Kiosk cloud storage bucket. This helps to save costs by preventing files from being stored in the bucket indefinitely.
+The `kiosk-bucket-monitor` (and more specifically the `StaleFileBucketMonitor`) is used to remove files from the DeepCell Kiosk cloud storage bucket. It is intended as a cost-saving mechanism that prevents files from being stored in the bucket indefinitely.
 
 This repository is part of the [DeepCell Kiosk](https://github.com/vanvalenlab/kiosk-console). More information about the Kiosk project is available through [Read the Docs](https://deepcell-kiosk.readthedocs.io/en/master) and our [FAQ](http://www.deepcell.org/faq) page.
 
