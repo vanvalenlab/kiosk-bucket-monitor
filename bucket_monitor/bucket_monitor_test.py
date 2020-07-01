@@ -99,12 +99,12 @@ class TestBaseBucketMonitor(object):
         with pytest.raises(ValueError):
             monitor.get_storage_api()
 
-    def test_get_all_files(self):
+    def test_get_all_files(self, mocker):
         # test GKE with stubbed client function
+        mocker.patch('google.cloud.storage.Client', DummyBucket)
         monitor = bucket_monitor.BaseBucketMonitor(
             cloud_provider='gke',
             bucket_name='bucket')
-        monitor.get_storage_api = DummyBucket
         prefix = 'test/'
         uploads = monitor.get_all_files(prefix)
 
@@ -116,21 +116,20 @@ class TestBaseBucketMonitor(object):
         monitor = bucket_monitor.BaseBucketMonitor(
             cloud_provider='bad',
             bucket_name='bucket')
-        monitor.get_storage_api = DummyBucket
         uploads = monitor.get_all_files('prefix/')
         assert uploads == []
 
 
 class TestBucketMonitor(object):
 
-    def test_scan_bucket_for_new_uploads(self):
+    def test_scan_bucket_for_new_uploads(self, mocker):
         redis_client = DummyRedis()
+        mocker.patch('google.cloud.storage.Client', DummyBucket)
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
             cloud_provider='gke',
             bucket_name='bucket',
             queue='q')
-        monitor.get_storage_api = DummyBucket
         monitor.scan_bucket_for_new_uploads(prefix='uploads/')
 
     def test_write_new_redis_key(self):
@@ -176,14 +175,14 @@ class TestBucketMonitor(object):
         result = monitor.write_new_redis_key(upload, redis_keys)
         assert result == 4
 
-    def test_create_redis_entry(self):
+    def test_create_redis_entry(self, mocker):
         redis_client = DummyRedis()
+        mocker.patch('google.cloud.storage.Client', DummyBucket)
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
             cloud_provider='gke',
             bucket_name='bucket',
             queue='q')
-        monitor.get_storage_api = DummyBucket
 
         # test valid direct_upload file_name
         model_name = 'model'
@@ -218,10 +217,10 @@ class TestBucketMonitor(object):
 
 class TestStaleFileBucketMonitor(object):
 
-    def test_scan_bucket_for_stale_files(self):
+    def test_scan_bucket_for_stale_files(self, mocker):
+        mocker.patch('google.cloud.storage.Client', DummyBucket)
         monitor = bucket_monitor.StaleFileBucketMonitor(
             cloud_provider='gke',
             bucket_name='bucket')
-        monitor.get_storage_api = DummyBucket
         monitor.scan_bucket_for_stale_files(
             prefix='uploads/', threshold=-1)
