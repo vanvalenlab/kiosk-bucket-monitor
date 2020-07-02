@@ -30,6 +30,7 @@ from __future__ import print_function
 
 import datetime
 
+import fakeredis
 import pytz
 import pytest
 
@@ -41,24 +42,9 @@ class Bunch(object):
         self.__dict__.update(kwds)
 
 
-class DummyRedis(object):
-    def __init__(self):
-        self.hvals = {}
-
-    def lpush(self, *_, **__):
-        return True
-
-    def keys(self):
-        return [
-        ]
-
-    def hmset(self, _, hvals):
-        self.hvals = hvals
-        return hvals
-
-    def hgetall(self, _):
-        return {
-        }
+@pytest.fixture
+def redis_client():
+    yield fakeredis.FakeStrictRedis(decode_responses='utf8')
 
 
 class DummyBucket(object):
@@ -121,9 +107,9 @@ class TestBaseBucketMonitor(object):
 
 
 class TestBucketMonitor(object):
+    # pylint: disable=W0621
 
-    def test_scan_bucket_for_new_uploads(self, mocker):
-        redis_client = DummyRedis()
+    def test_scan_bucket_for_new_uploads(self, mocker, redis_client):
         mocker.patch('google.cloud.storage.Client', DummyBucket)
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
@@ -132,9 +118,8 @@ class TestBucketMonitor(object):
             queue='q')
         monitor.scan_bucket_for_new_uploads(prefix='uploads/')
 
-    def test_write_new_redis_key(self):
+    def test_write_new_redis_key(self, redis_client):
         redis_keys = 'uploads/directupload_previously_uploaded.tifothertext'
-        redis_client = DummyRedis()
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
             cloud_provider='gke',
@@ -175,14 +160,14 @@ class TestBucketMonitor(object):
         result = monitor.write_new_redis_key(upload, redis_keys)
         assert result == 4
 
-    def test_create_redis_entry(self, mocker):
-        redis_client = DummyRedis()
+    def test_create_redis_entry(self, mocker, redis_client):
         mocker.patch('google.cloud.storage.Client', DummyBucket)
+        queue = 'q'
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
             cloud_provider='gke',
             bucket_name='bucket',
-            queue='q')
+            queue=queue)
 
         # test valid direct_upload file_name
         model_name = 'model'
@@ -196,14 +181,13 @@ class TestBucketMonitor(object):
         upload = Bunch(public_url='dummy_url')
         result = monitor.create_redis_entry(upload, fname, fname)
         assert result is True
-        assert redis_client.hvals['model_name'] == model_name
-        assert redis_client.hvals['model_version'] == str(model_version)
-        assert redis_client.hvals['postprocess_function'] == postprocess
-        assert redis_client.hvals['cuts'] == str(cuts)
-        assert redis_client.hvals['url'] == 'dummy_url'
+        hvals = redis_client.hgetall(redis_client.lpop(queue))
+        assert hvals['model_name'] == model_name
+        assert hvals['model_version'] == str(model_version)
+        assert hvals['postprocess_function'] == postprocess
+        assert hvals['url'] == 'dummy_url'
 
         # test bad file_name
-        redis_client = DummyRedis()
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
             cloud_provider='gke',
@@ -212,7 +196,7 @@ class TestBucketMonitor(object):
         bad_fname = 'regular_filename.tiff'
         result = monitor.create_redis_entry(upload, bad_fname, bad_fname)
         assert result is False
-        assert redis_client.hvals == {}
+        assert redis_client.lpop(queue) is None
 
 
 class TestStaleFileBucketMonitor(object):
