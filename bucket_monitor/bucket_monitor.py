@@ -173,7 +173,7 @@ class BucketMonitor(BaseBucketMonitor):
             'status': 'new',
             'url': upload.public_url,
             'input_file_name': 'uploads/%s' % original_filename,
-            'identity_upload': os.getenv('HOSTNAME'),
+            'identity_upload': os.getenv('HOSTNAME', ''),
             'created_at': datetime.datetime.now(pytz.UTC).isoformat(' '),
             'updated_at': datetime.datetime.now(pytz.UTC).isoformat(' '),
         }
