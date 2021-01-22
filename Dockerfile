@@ -29,7 +29,14 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt .
 
-RUN pip install -r requirements.txt
+# install dependencies for google-cloud-storage
+# https://github.com/googleapis/python-storage/issues/216#issuecomment-671279940
+RUN apk add --no-cache --virtual .build-deps \
+    gcc \
+    musl-dev \
+    libffi-dev \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apk del .build-deps
 
 COPY . .
 
