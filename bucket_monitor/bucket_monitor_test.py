@@ -70,27 +70,27 @@ class DummyBucket(object):
 
 class TestBaseBucketMonitor(object):
 
+    def test_init_bad_bucket_protocol(self):
+        bad_buckets = ['noprotocol', 'bad:/typo', 'bad//typo']
+        for bad_bucket in bad_buckets:
+            with pytest.raises(ValueError):
+                bucket_monitor.BaseBucketMonitor(bucket=bad_bucket)
+
     def test_get_storage_api(self):
         # test AWS not implemented yet
-        monitor = bucket_monitor.BaseBucketMonitor(
-            cloud_provider='AWS',
-            bucket_name='bucket')
+        monitor = bucket_monitor.BaseBucketMonitor(bucket='s3://bucket')
         with pytest.raises(NotImplementedError):
             monitor.get_storage_api()
 
-        # test invalid values for cloud_provider
-        monitor = bucket_monitor.BaseBucketMonitor(
-            cloud_provider='bad',
-            bucket_name='bucket')
+        # test invalid bucket protocol
+        monitor = bucket_monitor.BaseBucketMonitor(bucket='bad://bucket')
         with pytest.raises(ValueError):
             monitor.get_storage_api()
 
     def test_get_all_files(self, mocker):
         # test GKE with stubbed client function
         mocker.patch('google.cloud.storage.Client', DummyBucket)
-        monitor = bucket_monitor.BaseBucketMonitor(
-            cloud_provider='gke',
-            bucket_name='bucket')
+        monitor = bucket_monitor.BaseBucketMonitor(bucket='gs://bucket')
         prefix = 'test/'
         uploads = monitor.get_all_files(prefix)
 
@@ -99,9 +99,7 @@ class TestBaseBucketMonitor(object):
         assert names == get_names(DummyBucket().list_blobs(prefix))
 
         # test invalid values for cloud_provider
-        monitor = bucket_monitor.BaseBucketMonitor(
-            cloud_provider='bad',
-            bucket_name='bucket')
+        monitor = bucket_monitor.BaseBucketMonitor(bucket='bad://bucket')
         uploads = monitor.get_all_files('prefix/')
         assert uploads == []
 
@@ -113,8 +111,7 @@ class TestBucketMonitor(object):
         mocker.patch('google.cloud.storage.Client', DummyBucket)
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
-            cloud_provider='gke',
-            bucket_name='bucket',
+            bucket='gs://bucket',
             queue='q')
         monitor.scan_bucket_for_new_uploads(prefix='uploads/')
 
@@ -122,8 +119,7 @@ class TestBucketMonitor(object):
         redis_keys = 'uploads/directupload_previously_uploaded.tifothertext'
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
-            cloud_provider='gke',
-            bucket_name='bucket',
+            bucket='gs://bucket',
             queue='q')
 
         # test invalid web upload
@@ -165,8 +161,7 @@ class TestBucketMonitor(object):
         queue = 'q'
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
-            cloud_provider='gke',
-            bucket_name='bucket',
+            bucket='gs://bucket',
             queue=queue)
 
         # test valid direct_upload file_name
@@ -190,8 +185,7 @@ class TestBucketMonitor(object):
         # test bad file_name
         monitor = bucket_monitor.BucketMonitor(
             redis_client=redis_client,
-            cloud_provider='gke',
-            bucket_name='bucket',
+            bucket='gs://bucket',
             queue='q')
         bad_fname = 'regular_filename.tiff'
         result = monitor.create_redis_entry(upload, bad_fname, bad_fname)
@@ -203,8 +197,5 @@ class TestStaleFileBucketMonitor(object):
 
     def test_scan_bucket_for_stale_files(self, mocker):
         mocker.patch('google.cloud.storage.Client', DummyBucket)
-        monitor = bucket_monitor.StaleFileBucketMonitor(
-            cloud_provider='gke',
-            bucket_name='bucket')
-        monitor.scan_bucket_for_stale_files(
-            prefix='uploads/', threshold=-1)
+        monitor = bucket_monitor.StaleFileBucketMonitor(bucket='gs://bucket')
+        monitor.scan_bucket_for_stale_files(prefix='uploads/', threshold=-1)
