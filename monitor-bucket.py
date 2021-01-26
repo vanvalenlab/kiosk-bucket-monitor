@@ -41,29 +41,27 @@ import logging.handlers
 import bucket_monitor
 
 
-def initialize_logger(debug_mode=True):
+def initialize_logger(log_level='DEBUG'):
+    log_level = str(log_level).upper()
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
-    formatter = logging.Formatter(
-        '[%(asctime)s]:[%(levelname)s]:[%(name)s]: %(message)s')
+    formatter = logging.Formatter('[%(levelname)s]:[%(name)s]: %(message)s')
     console = logging.StreamHandler(stream=sys.stdout)
     console.setFormatter(formatter)
 
-    fh = logging.handlers.RotatingFileHandler(
-        filename='bucket-monitor.log',
-        maxBytes=10000000,
-        backupCount=10)
-    fh.setFormatter(formatter)
-
-    if debug_mode:
-        console.setLevel(logging.DEBUG)
-    else:
+    if log_level == 'CRITICAL':
+        console.setLevel(logging.CRITICAL)
+    elif log_level == 'ERROR':
+        console.setLevel(logging.ERROR)
+    elif log_level == 'WARN':
+        console.setLevel(logging.WARN)
+    elif log_level == 'INFO':
         console.setLevel(logging.INFO)
-    fh.setLevel(logging.DEBUG)
+    else:
+        console.setLevel(logging.DEBUG)
 
     logger.addHandler(console)
-    logger.addHandler(fh)
 
 
 if __name__ == '__main__':
@@ -71,7 +69,7 @@ if __name__ == '__main__':
     PREFIXES = os.getenv('PREFIX', 'uploads/,output/').split(',')
     AGE_THRESHOLD = int(os.getenv('AGE_THRESHOLD', str(3 * 24 * 60 * 60)))
 
-    initialize_logger(os.getenv('DEBUG'))
+    initialize_logger(os.getenv('LOG_LEVEL', 'DEBUG'))
 
     _logger = logging.getLogger(__file__)
 
