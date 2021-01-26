@@ -82,13 +82,11 @@ if __name__ == '__main__':
     #
     # MONITOR = bucket_monitor.BucketMonitor(
     #     redis_client=REDIS,
-    #     cloud_provider=os.getenv('CLOUD_PROVIDER'),
-    #     bucket_name=os.getenv('BUCKET'),
+    #     bucket=os.getenv('STORAGE_BUCKET'),
     #     queue=os.getenv('QUEUE', 'predict'))
 
     MONITOR = bucket_monitor.StaleFileBucketMonitor(
-        cloud_provider=os.getenv('CLOUD_PROVIDER'),
-        bucket_name=os.getenv('BUCKET'))
+        bucket=os.getenv('STORAGE_BUCKET'))
 
     while True:
         for prefix in PREFIXES:

@@ -44,18 +44,24 @@ class BaseBucketMonitor(object):  # pylint: disable=useless-object-inheritance
     Args:
         cloud_provider (str): Storage bucket cloud platform,
             one of "aws" or "gke".
-        bucket_name (str): The name of the stoage bucket.
+        bucket (str): The name of the stoage bucket.
     """
 
-    def __init__(self, cloud_provider, bucket_name):
+    def __init__(self, bucket):
+        try:
+            protocol, bucket_name = str(bucket).lower().split('://', 1)
+        except ValueError:
+            raise ValueError('Invalid storage bucket name: {}'.format(
+                bucket))
+
+        self.cloud_provider = protocol
         self.bucket_name = bucket_name
-        self.cloud_provider = str(cloud_provider).lower()
         self.logger = logging.getLogger(str(self.__class__.__name__))
 
     def get_storage_api(self):
-        if self.cloud_provider == 'gke':
+        if self.cloud_provider == 'gs':
             return storage.Client()
-        if self.cloud_provider == 'aws':
+        if self.cloud_provider == 's3':
             raise NotImplementedError('{} does not yet support `{}`.'.format(
                 self.__class__.__name__, self.cloud_provider))
         raise ValueError('Invalid value for `cloud_provider`: {}.'.format(
@@ -63,11 +69,11 @@ class BaseBucketMonitor(object):  # pylint: disable=useless-object-inheritance
 
     def get_all_files(self, prefix=None):
         all_uploads = []
-        if self.cloud_provider == 'gke':
+        if self.cloud_provider == 'gs':
             client = self.get_storage_api()
             bucket = client.get_bucket(self.bucket_name)
             all_uploads = bucket.list_blobs(prefix=prefix)
-        elif self.cloud_provider == 'aws':
+        elif self.cloud_provider == 's3':
             raise NotImplementedError('{} does not yet support `{}`.'.format(
                 self.__class__.__name__, self.cloud_provider))
         return all_uploads
@@ -78,20 +84,18 @@ class BucketMonitor(BaseBucketMonitor):
 
     Args:
         redis_client (obj): Redis client object for communicating with redis.
-        cloud_provider (str): Storage bucket cloud platform,
-            one of "aws" or "gke".
         bucket_name (str): The name of the stoage bucket.
         queue (str): The redis queue name to add new jobs.
     """
 
-    def __init__(self, redis_client, cloud_provider, bucket_name, queue):
+    def __init__(self, redis_client, bucket, queue):
         self.redis_client = redis_client
         self.queue = str(queue).lower()
 
         # get initial timestamp to act as a baseline, assume UTC for everything
         self.current_timestamp = datetime.datetime.now(pytz.UTC)
 
-        super(BucketMonitor, self).__init__(cloud_provider, bucket_name)
+        super(BucketMonitor, self).__init__(bucket)
 
     def scan_bucket_for_new_uploads(self, prefix='uploads/'):
         # get a timestamp to mark the baseline for the next loop iteration
