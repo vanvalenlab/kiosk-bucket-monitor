@@ -91,7 +91,7 @@ jobs:
     - name: Build and Run Unit Tests
       env:
         IMAGE: ${{ github.repository }}:${{ github.sha }}
-        NAME: autoscaler
+        NAME: bucket_monitor
       run: |
         docker buildx build --load --tag ${{ env.IMAGE }} .
         docker run -d -it \
